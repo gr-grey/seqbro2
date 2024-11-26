@@ -1,12 +1,20 @@
-import React from "react";
-import { useGenomeContext } from "./GenomeContext"
+import React, { useState, useEffect } from "react";
+import { useGenomeContext } from "./GenomeContext";
+import useDebounce from "./useDebounce";
 
-const labelStyle = "block text-sm font-md text-gray-700"
-const fieldStyle = "w-full rounded-md border border-gray-300 p-2"
+const labelStyle = "block text-sm font-md text-gray-700";
+const fieldStyle = "w-full rounded-md border border-gray-300 p-2";
 
 
 const LeftPanel = () => {
     const { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene } = useGenomeContext();
+
+    // shared/ global coords only gets updated after user stop editting for 800ms
+    const [tempCoordinate, setTempCoordinate] = useState(coordinate);
+    const debouncedCoordinate = useDebounce(tempCoordinate, 500);
+
+    // update real coords
+    useEffect(() => {setCoordinate(debouncedCoordinate);}, [debouncedCoordinate]);
 
     return (
         <div className="w-1/4 max-w-80 border-r border-gray-300 p-4 h-full" >
@@ -38,8 +46,8 @@ const LeftPanel = () => {
                 {/* Coordinate */}
                 <div>                
                     <label className={labelStyle}>Coordinate</label>
-                    <input type="number" value={coordinate}
-                        onChange={(e) => setCoordinate(parseInt(e.target.value))}
+                    <input type="number" value={tempCoordinate}
+                        onChange={(e) => setTempCoordinate(parseInt(e.target.value))}
                         className={fieldStyle}
                     />
                 </div>
