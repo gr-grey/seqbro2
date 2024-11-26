@@ -17,7 +17,7 @@ const LeftPanel = () => {
     useEffect(() => {setCoordinate(debouncedCoordinate);}, [debouncedCoordinate]);
 
     return (
-        <div className="w-1/4 max-w-80 border-r border-gray-300 p-4 h-full" >
+        <div>
             <form className="space-y-4">
                 {/* Genome */}
                 <div>
@@ -26,7 +26,7 @@ const LeftPanel = () => {
                         onChange={(e) => setGenome(e.target.value)}
                         className={fieldStyle}
                     >
-                        <option value="Human">Human</option>
+                        <option value="hg38">Human</option>
                         <option value="Mouse">Mouse</option>
                     </select>
                 </div>
