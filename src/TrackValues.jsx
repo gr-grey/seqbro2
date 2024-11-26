@@ -1,7 +1,7 @@
 import React from "react";
 import { useGenomeContext } from "./GenomeContext";
 
-const RightPanel = () => {
+const TrackValues = () => {
     const { genome, chromosome, coordinate, strand, gene } = useGenomeContext();
 
     return(
@@ -19,4 +19,4 @@ const RightPanel = () => {
     );
 };
 
-export default RightPanel;
+export default TrackValues;

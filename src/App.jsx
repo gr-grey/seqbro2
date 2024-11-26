@@ -2,7 +2,7 @@ import { useState } from 'react';
 import './App.css';
 import NavBar from './NavBar';
 import LeftPanel from './LeftPanel';
-import RightPanel from './RightPanel';
+import TrackValues from './TrackValues';
 import { GenomeProvider } from "./GenomeContext";
 
 function App() {
@@ -12,7 +12,7 @@ function App() {
       <NavBar />
       <div className="flex h-screen">
         <LeftPanel />      
-        <RightPanel />
+        <TrackValues />
 
       </div>
       <p className="read-the-docs">
