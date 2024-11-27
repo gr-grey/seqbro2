@@ -35,8 +35,16 @@ export const GenomeProvider = ({ children }) => {
         if (coordinate && !isNaN(coordinate)) { fetchSequence(); }
     }, [genome, chromosome, coordinate, strand]);
 
+    // Sequence Box, needed width for scrolling implementation
+    const SequenceBox = () => (
+        <div className="bg-gray-50 border border-gray-300 overflow-x-auto font-mono">
+            {sequence || "Loading sequence...."}
+        </div>
+
+    );
+
     const contextValue={
-        genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene, sequence,
+        genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene, sequence, SequenceBox,
     };
 
     return <GenomeContext.Provider value={contextValue}>{children}</GenomeContext.Provider>
