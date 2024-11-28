@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 
 // Variables storing genome information, like hg38, chr1, -, 1112999 etc.
 // Centralize state managment of shared varaibles
@@ -36,15 +36,18 @@ export const GenomeProvider = ({ children }) => {
     }, [genome, chromosome, coordinate, strand]);
 
     // Sequence Box, needed width for scrolling implementation
+    const sequenceBoxRef = useRef(null);
     const SequenceBox = () => (
-        <div className="bg-gray-50 border border-gray-300 overflow-x-auto font-mono">
+        <div className="bg-gray-50 border border-gray-300 overflow-x-auto font-mono"
+            ref={sequenceBoxRef}
+        >
             {sequence || "Loading sequence...."}
         </div>
 
     );
 
     const contextValue={
-        genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene, sequence, SequenceBox,
+        genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene, sequence, SequenceBox, sequenceBoxRef,
     };
 
     return <GenomeContext.Provider value={contextValue}>{children}</GenomeContext.Provider>
