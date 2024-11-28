@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useGenomeContext } from "./GenomeContext";
 
 const SeqBox = () => {
-    const { SequenceBox, sequenceBoxRef } = useGenomeContext();
+    const { SequenceBox, sequenceBoxRef, sequence } = useGenomeContext();
 
     // Remap the mouse scrolling up and down to left and right
     // within SequenceBox
@@ -62,7 +62,9 @@ const SeqBox = () => {
                     &gt; {/* Right Arrow */}
                 </button>
             </div>
-            <SequenceBox />
+            <SequenceBox 
+              className="bg-red-50 border border-gray-300 overflow-x-auto font-mono"
+            >{sequence || "Loading...."}</SequenceBox>
         </div>
     );
 };

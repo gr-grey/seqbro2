@@ -37,13 +37,10 @@ export const GenomeProvider = ({ children }) => {
 
     // Sequence Box, needed width for scrolling implementation
     const sequenceBoxRef = useRef(null);
-    const SequenceBox = () => (
-        <div className="bg-gray-50 border border-gray-300 overflow-x-auto font-mono"
-            ref={sequenceBoxRef}
-        >
-            {sequence || "Loading sequence...."}
+    const SequenceBox = ({ children, className }) => (
+        <div className={className} ref={sequenceBoxRef}>
+            {children}
         </div>
-
     );
 
     const contextValue={
