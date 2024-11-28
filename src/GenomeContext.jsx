@@ -15,24 +15,45 @@ export const GenomeProvider = ({ children }) => {
     const [gene, setGene] = useState("ACTB");
     const [sequence, setSequence] = useState("");
     const halfLen = 500; // retrieve center -/+ 500, 1001 sequencec in total
+    const [seqStart, setSeqStart] = useState(null);
+    const [seqEnd, setSeqEnd] = useState(null);
+    const [displayStart, setDisplayStart] = useState(null);
+    const [displayEnd, setDisplayEnd] = useState(null);
+    const [displaySequence, setDisplaySequence] = useState("");
 
-    const fetchSequence = async () => {
-        const start = coordinate - halfLen;
-        const end = coordinate + halfLen;
+
+    const fetchSequence = async (start, end) => {
         // hard code hg38 for now, might change later
         const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`;
-
         try {
             const response = await fetch(url);
             const data = await response.json();
-            setSequence(data[0]?.data || "");
-        } catch (error) { console.error("Failed to fetch sequence: ", error); }
+            // setSequence(data[0]?.data || "");
+            return data[0]?.data || "";
+        } catch (error) { 
+            console.error("Failed to fetch sequence: ", error); 
+            return ""; 
+        }
     };
 
     // Update sequence when genome, chrom, coord or strand changes
     useEffect(()=>{
         // when clear out coord field, coordinate becomes NaN
-        if (coordinate && !isNaN(coordinate)) { fetchSequence(); }
+        if (coordinate && Number.isInteger(coordinate)) { 
+            const fetchAndSetSequence = async () => {
+                const start = coordinate - halfLen;
+                const end = coordinate + halfLen + 1; // seqstr exclude the last coord, but we want that letter too
+                const tempSequence = await fetchSequence(start, end);
+                setSequence(tempSequence);
+                setSeqStart(start); setSeqEnd(end);
+                // display the middle half of full sequence
+                setDisplaySequence(tempSequence.slice(halfLen/2, - halfLen/2));
+                // start/end display start/end are for debugging purpose
+                setDisplayStart(start + halfLen/2);
+                setDisplayEnd(end - halfLen/2);
+            };
+            fetchAndSetSequence();
+        }
     }, [genome, chromosome, coordinate, strand]);
 
     // Sequence Box, needed width for scrolling implementation
@@ -44,8 +65,9 @@ export const GenomeProvider = ({ children }) => {
     );
 
     const contextValue={
-        genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene, sequence, SequenceBox, sequenceBoxRef,
+        genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene, sequence, SequenceBox, sequenceBoxRef, halfLen, seqStart, seqEnd, displaySequence, displayStart, displayEnd,
     };
+
 
     return <GenomeContext.Provider value={contextValue}>{children}</GenomeContext.Provider>
 };

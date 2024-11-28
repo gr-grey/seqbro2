@@ -4,7 +4,7 @@ import NavBar from './NavBar';
 import LeftPanel from './LeftPanel';
 import TrackValues from './TrackValues';
 import SeqBox from './SeqBox';
-import { GenomeProvider, useGenomeContext } from "./GenomeContext";
+import { GenomeProvider } from "./GenomeContext";
 
 function App() {
   return (
@@ -17,7 +17,7 @@ function App() {
         </div>
 
         {/* Right side */}
-        <div className="w-3/4 flex-grow p-2">
+        <div className="w-3/4 flex-grow p-2 relative overflow-visible">
           <SeqBox />
           <TrackValues />
         </div>

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useGenomeContext } from "./GenomeContext";
 
 const SeqBox = () => {
-    const { SequenceBox, sequenceBoxRef, sequence } = useGenomeContext();
+    const { SequenceBox, sequenceBoxRef, displaySequence, displayStart } = useGenomeContext();
 
     // Remap the mouse scrolling up and down to left and right
     // within SequenceBox
@@ -42,6 +42,12 @@ const SeqBox = () => {
         }
     };
 
+    // tooltip array: [startCoord, endCoord)
+    const coords = Array.from(
+        { length: displaySequence?.length || 0 },
+        (_, index) => displayStart + index
+    );
+
     return (
         <div>
             <div className="flex mb-2">
@@ -62,9 +68,51 @@ const SeqBox = () => {
                     &gt; {/* Right Arrow */}
                 </button>
             </div>
-            <SequenceBox 
-              className="bg-red-50 border border-gray-300 overflow-x-auto font-mono"
-            >{sequence || "Loading...."}</SequenceBox>
+
+            {/* Bare seq box, no tooltip */}
+            {/* <SequenceBox 
+              className="bg-gray-50 border border-gray-300 overflow-x-auto font-mono"
+            >{displaySequence || "Loading...."}</SequenceBox> */}
+
+            {/* customized tooltip, fast, but has problem clipped by other components */}
+            <SequenceBox
+                className="bg-gray-50 pt-8 border-b border-gray-300 overflow-x-auto font-mono whitespace-nowrap"
+            >
+                {displaySequence
+                    ? displaySequence.split("").map((char, index) => (
+                        <span
+                            key={index}
+                            className="relative group inline-block border-t border-gray-300"
+                        >
+                            {char}
+                              {/* Tooltip */}
+                            <span
+                                className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 px-2 py-1 text-xs bg-black text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none"
+                                style={{ whiteSpace: "nowrap" }}
+                            >
+                                {coords[index]}
+                            </span>
+                        </span>
+                    ))
+                    : "Loading...."
+                }
+            </SequenceBox>
+
+            {/* Native tooltips, no clipping problem, but  */}
+            {/* <SequenceBox
+                className="relative bg-gray-50 border border-gray-300 overflow-x-auto font-mono whitespace-nowrap"
+            >
+                {displaySequence?.split("").map((char, index) => (
+                    <span
+                        key={index}
+                        className="inline-block"
+                        title={coords[index]} // Native tooltip with coordinate
+                    >
+                        {char}
+                    </span>
+                ))}
+            </SequenceBox> */}
+
         </div>
     );
 };
