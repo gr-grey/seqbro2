@@ -4,6 +4,8 @@
 import { useEffect, useState } from "react";
 import { useGenomeContext } from "./GenomeContext";
 
+const devMode = true;
+
 const SeqBox = () => {
     const { SequenceBox, sequenceBoxRef, displaySequence, displayStart } = useGenomeContext();
 
@@ -75,30 +77,33 @@ const SeqBox = () => {
             >{displaySequence || "Loading...."}</SequenceBox> */}
 
             {/* customized tooltip, fast, but has problem clipped by other components */}
-            <SequenceBox
-                className="bg-gray-50 pt-8 border-b border-gray-300 overflow-x-auto font-mono whitespace-nowrap"
-            >
-                {displaySequence
-                    ? displaySequence.split("").map((char, index) => (
-                        <span
-                            key={index}
-                            className="relative group inline-block border-t border-gray-300"
-                        >
-                            {char}
-                              {/* Tooltip */}
+            <div className="relative">
+                <SequenceBox
+                    className="bg-gray-50 pt-8 border-b border-gray-300 overflow-x-auto font-mono whitespace-nowrap"
+                >
+                    {displaySequence
+                        ? displaySequence.split("").map((char, index) => (
                             <span
-                                className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 px-2 py-1 text-xs bg-black text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none"
-                                style={{ whiteSpace: "nowrap" }}
+                                key={index}
+                                className="relative group inline-block border-t border-gray-300"
                             >
-                                {coords[index]}
+                                {char}
+                                  {/* Tooltip */}
+                                <span
+                                    className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 px-2 py-1 text-xs bg-black text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none"
+                                    style={{ whiteSpace: "nowrap" }}
+                                >
+                                    {coords[index]}
+                                </span>
                             </span>
-                        </span>
-                    ))
-                    : "Loading...."
-                }
-            </SequenceBox>
+                        ))
+                        : "Loading...."
+                    }
+                    {devMode && <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div> }
+                </SequenceBox>
+            </div>
 
-            {/* Native tooltips, no clipping problem, but  */}
+            {/* Native tooltips, no clipping problem, but slow and no customized look  */}
             {/* <SequenceBox
                 className="relative bg-gray-50 border border-gray-300 overflow-x-auto font-mono whitespace-nowrap"
             >
