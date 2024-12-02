@@ -20,6 +20,9 @@ export const GenomeProvider = ({ children }) => {
     const [displayStart, setDisplayStart] = useState(null);
     const [displayEnd, setDisplayEnd] = useState(null);
     const [displaySequence, setDisplaySequence] = useState("");
+    const [displayCenter, setDisplayCenter] = useState(coordinate);
+    // useRef doesn't trigger re-renders, state variables keep resetting the SequenceBox back to 
+    const displayCurrentLeftRef = useRef(0);
 
 
     const fetchSequence = async (start, end) => {
@@ -30,16 +33,16 @@ export const GenomeProvider = ({ children }) => {
             const data = await response.json();
             // setSequence(data[0]?.data || "");
             return data[0]?.data || "";
-        } catch (error) { 
-            console.error("Failed to fetch sequence: ", error); 
-            return ""; 
+        } catch (error) {
+            console.error("Failed to fetch sequence: ", error);
+            return "";
         }
     };
 
     // Update sequence when genome, chrom, coord or strand changes
-    useEffect(()=>{
+    useEffect(() => {
         // when clear out coord field, coordinate becomes NaN
-        if (coordinate && Number.isInteger(coordinate)) { 
+        if (coordinate && Number.isInteger(coordinate)) {
             const fetchAndSetSequence = async () => {
                 const start = coordinate - halfLen;
                 const end = coordinate + halfLen + 1; // seqstr exclude the last coord, but we want that letter too
@@ -47,10 +50,10 @@ export const GenomeProvider = ({ children }) => {
                 setSequence(tempSequence);
                 setSeqStart(start); setSeqEnd(end);
                 // display the middle half of full sequence
-                setDisplaySequence(tempSequence.slice(halfLen/2, - halfLen/2));
+                setDisplaySequence(tempSequence.slice(halfLen / 2, - halfLen / 2));
                 // start/end display start/end are for debugging purpose
-                setDisplayStart(start + halfLen/2);
-                setDisplayEnd(end - halfLen/2);
+                setDisplayStart(start + halfLen / 2);
+                setDisplayEnd(end - halfLen / 2);
             };
             fetchAndSetSequence();
         }
@@ -58,14 +61,39 @@ export const GenomeProvider = ({ children }) => {
 
     // Sequence Box, needed width for scrolling implementation
     const sequenceBoxRef = useRef(null);
+
+    // calculate and display the leftmost coords
+    const handleScroll = () => {
+        if (sequenceBoxRef.current) {
+            const { scrollLeft, scrollWidth, clientWidth } = sequenceBoxRef.current;
+            // calculate scroll percentage
+            const scrollPercent = scrollLeft / (scrollWidth - clientWidth);
+            // calculate leftmost coord based on scroll position
+            let seqBoxCenCoord = (halfLen + 1) * (scrollPercent - 0.5) + coordinate;
+            // setDisplayCenter(Math.round(seqBoxCenCoord));
+            // displayCurrentLeftRef.current = currentLeftCoord;
+            // setDisplayCurrentLeft(currentLeftCoord);
+            // debug
+            console.log("center", seqBoxCenCoord);
+            console.log() ;
+        }
+    };
+
+    // useEffect(() => {
+    //     if (sequenceBoxRef.current) {
+    //         sequenceBoxRef.current.addEventListener("scroll", handleScroll);
+    //         return () => sequenceBoxRef.current.removeEventListener("scroll", handleScroll);
+    //     }
+    // }, [displayStart]);
+
     const SequenceBox = ({ children, className }) => (
-        <div className={className} ref={sequenceBoxRef}>
+        <div className={className} ref={sequenceBoxRef} onScroll={handleScroll}>
             {children}
         </div>
     );
 
-    const contextValue={
-        genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene, sequence, SequenceBox, sequenceBoxRef, halfLen, seqStart, seqEnd, displaySequence, displayStart, displayEnd,
+    const contextValue = {
+        genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene, sequence, SequenceBox, sequenceBoxRef, halfLen, seqStart, seqEnd, displaySequence, displayStart, displayEnd, displayCurrentLeftRef
     };
 
 
