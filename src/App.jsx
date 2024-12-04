@@ -17,8 +17,18 @@ function App() {
   const [displayEnd, setDisplayEnd] = useState(null);
   const [displaySequence, setDisplaySequence] = useState("");
   const [displayCenter, setDisplayCenter] = useState(coordinate);
+  const [tooltips, setToolTips] = useState([]);
 
   const seqBoxRef = useRef(null);
+
+  // update tool tips when start, end or center coords changed
+  useEffect(() => {
+    const t = Array.from(
+      { length: sequence?.length || 0 },
+      (_, index) => seqStart + index
+    );
+    setToolTips(t);
+  }, [seqStart, sequence]);
 
   const fetchSequence = async (start, end) => {
     const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`;
@@ -26,12 +36,8 @@ function App() {
       const response = await fetch(url);
       const data = await response.json();
       const sequence = data[0]?.data || "";
-      // const tooltips = sequence.split('').map((_, index) => start + index);
-      // console.log(tooltips);
-      // console.log(sequence.split('').map((char, index) => {return {char, tooltip: index+start}}));
+
       return sequence;
-      return sequence.split('').map((char, index) => {return {char, tooltip: index+start}});
-      
     } catch (error) {
       console.error("Failed to fetch sequence: ", error);
       return "";
@@ -46,14 +52,14 @@ function App() {
       // temp sequence
       const seq = await fetchSequence(start, end);
       setSequence(seq);
-      console.log(seq);
       setSeqStart(start); setSeqEnd(end);
 
       // scroll to 50%
       setTimeout(() => {
-        const halfway = (seqBoxRef.current.scrollWidth - seqBoxRef.current.clientWidth) / 2;
+        const halfway = (seqBoxRef.current.scrollWidth - seqBoxRef.current.clientWidth ) / 2;
+        console.log(halfway);
         seqBoxRef.current.scrollLeft = halfway;
-      }, 0);
+      }, 10);
     }
     init();
   }, []);
@@ -65,7 +71,7 @@ function App() {
     const scrollPercent = elem.scrollLeft / leftEnd;
     const visibleSeqLen = (halfLen * 2 + 1) / elem.scrollWidth * elem.clientWidth;
 
-    const center = Math.round(coordinate - halfLen - 1 + (halfLen * 2 + 1 - visibleSeqLen) * scrollPercent + 0.5 * visibleSeqLen);
+    const center = Math.round(seqStart + (halfLen * 2 - visibleSeqLen) * scrollPercent + 0.5 * visibleSeqLen);
     setDisplayCenter(center);
   };
 
@@ -75,17 +81,29 @@ function App() {
       <h1 className="text-xl text-center">SeqBro v2</h1>
       {/* sequence box */}
       <div className="relative">
-        <div className="bg-gray-50 pt-8 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono whitespace-nowrap"
+        <div className="bg-gray-50 pt-8 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
           ref={seqBoxRef}
           onScroll={handleScroll}
+          style={{ whiteSpace: "nowrap" }}
         >
-          {sequence}
-          {/* {sequence.map((seqVal, i) => (
-            <span key={i} title={seqVal.tooltip} style={{ backgroundColor: seqVal.color }}>{seqVal.char}</span>
-          ))} */}
-        </div>
-        {/* center line for debug */}
+          {sequence
+            ? sequence.split("").map((char, index) => (
+              <span key={index} className="group">
+                {char}
+                {/* Tooltip */}
+                <span
+                  className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 px-2 py-1 text-xs bg-black text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none"
+                >
+                  {tooltips[index]}
+                </span>
+              </span>
+            ))
+            : "Loading...."
+          }
+          {/* center line for debug */}
         <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
+        </div>
+        
 
       </div>
 
