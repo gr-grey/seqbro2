@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import './App.css';
+import Tippy from '@tippyjs/react';
+import 'tippy.js/dist/tippy.css';
 
 function App() {
   // get sequence
@@ -81,31 +83,23 @@ function App() {
       <h1 className="text-xl text-center">SeqBro v2</h1>
       {/* sequence box */}
       <div className="relative">
-        <div className="bg-gray-50 pt-8 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
-          ref={seqBoxRef}
-          onScroll={handleScroll}
-          style={{ whiteSpace: "nowrap" }}
-        >
-          {sequence
-            ? sequence.split("").map((char, index) => (
-              <span key={index} className="group">
-                {char}
-                {/* Tooltip */}
-                <span
-                  className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 px-2 py-1 text-xs bg-black text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none"
-                >
-                  {tooltips[index]}
-                </span>
-              </span>
+      <div
+        className="bg-gray-50 pt-5 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
+        ref={seqBoxRef}
+        onScroll={handleScroll}
+        style={{ whiteSpace: "nowrap" }}
+      >
+        {sequence
+          ? sequence.split("").map((char, index) => (
+              <Tippy content={tooltips[index]} key={index}>
+                <span>{char}</span>
+              </Tippy>
             ))
-            : "Loading...."
-          }
-          {/* center line for debug */}
+          : "Loading...."}
+        {/* Center line for debug */}
         <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
-        </div>
-        
-
       </div>
+    </div>
 
       <div className="border-t border-gray-200 mt-2">
         <h1>Debug:</h1>
