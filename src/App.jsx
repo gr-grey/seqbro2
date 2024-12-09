@@ -23,14 +23,17 @@ function App() {
 
   const seqBoxRef = useRef(null);
 
+  // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
+  const range = (start, stop, step = 1) =>
+    Array.from(
+      { length: Math.ceil((stop - start) / step) },
+      (_, i) => start + i * step,
+    );
+
   // update tool tips when start, end or center coords changed
   useEffect(() => {
-    const t = Array.from(
-      { length: sequence?.length || 0 },
-      (_, index) => seqStart + index
-    );
-    setToolTips(t);
-  }, [seqStart, sequence]);
+    const t = range(seqStart, seqEnd); setToolTips(t);
+  }, [seqStart, seqEnd]);
 
   const fetchSequence = async (start, end) => {
     const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`;
@@ -50,7 +53,7 @@ function App() {
   useEffect(() => {
     const init = async () => {
       const start = coordinate - halfLen;
-      const end = coordinate + halfLen + 1; // seqstr exclude last char
+      const end = coordinate + halfLen; // seqstr exclude last char
       // temp sequence
       const seq = await fetchSequence(start, end);
       setSequence(seq);
@@ -58,8 +61,7 @@ function App() {
 
       // scroll to 50%
       setTimeout(() => {
-        const halfway = (seqBoxRef.current.scrollWidth - seqBoxRef.current.clientWidth ) / 2;
-        console.log(halfway);
+        const halfway = (seqBoxRef.current.scrollWidth - seqBoxRef.current.clientWidth) / 2;
         seqBoxRef.current.scrollLeft = halfway;
       }, 10);
     }
@@ -71,35 +73,48 @@ function App() {
     const elem = seqBoxRef.current;
     const leftEnd = elem.scrollWidth - elem.clientWidth;
     const scrollPercent = elem.scrollLeft / leftEnd;
-    const visibleSeqLen = (halfLen * 2 + 1) / elem.scrollWidth * elem.clientWidth;
+    const visibleSeqLen = halfLen * 2 / elem.scrollWidth * elem.clientWidth;
 
     const center = Math.round(seqStart + (halfLen * 2 - visibleSeqLen) * scrollPercent + 0.5 * visibleSeqLen);
     setDisplayCenter(center);
   };
 
+  // Add background color for beginning, middle and end of sequence for debug
+  const getBackgroundColor = (index, seqLength) => {
+    if (index < 30) {
+      return "yellow"; // First 50 characters
+    } else if (index === Math.floor(seqLength / 2)) {
+      return "red"; // Middle character
+    } else if (index >= seqLength - 30) {
+      return "green"; // Last 50 characters
+    }
+    return "transparent"; // Default background
+  };
 
   return (
     <>
       <h1 className="text-xl text-center">SeqBro v2</h1>
       {/* sequence box */}
       <div className="relative">
-      <div
-        className="bg-gray-50 pt-5 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
-        ref={seqBoxRef}
-        onScroll={handleScroll}
-        style={{ whiteSpace: "nowrap" }}
-      >
-        {sequence
-          ? sequence.split("").map((char, index) => (
+        <div
+          className="bg-gray-50 pt-5 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
+          ref={seqBoxRef}
+          onScroll={handleScroll}
+          style={{ whiteSpace: "nowrap" }}
+        >
+          {sequence
+            ? sequence.split("").map((char, index) => (
               <Tippy content={tooltips[index]} key={index}>
-                <span>{char}</span>
+                <span style={{ backgroundColor: getBackgroundColor(index, sequence.length) }} >
+                  {char}
+                </span>
               </Tippy>
             ))
-          : "Loading...."}
-        {/* Center line for debug */}
-        <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
+            : "Loading...."}
+          {/* Center line for debug */}
+          <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
+        </div>
       </div>
-    </div>
 
       <div className="border-t border-gray-200 mt-2">
         <h1>Debug:</h1>
@@ -114,6 +129,8 @@ function App() {
           <li><span> display start - center end:</span> {displayStart} - {coordinate} - {displayEnd}</li>
 
           <li><span> display center:</span> {displayCenter}</li>
+
+          <li><span> tooltip length</span> {tooltips.length}</li>
 
           <li><span> full seq:</span>
             {/* mini sequence box */}
