@@ -12,8 +12,8 @@ function App() {
   const [strand, setStrand] = useState('+');
 
   const [sequence, setSequence] = useState("");
-  const halfLen = 500; // retrieve center -/+ 500, 1001 sequencec in total
-  const quaterLen = 250;
+  const halfLen = 1000; // retrieve center -/+ 500, 1001 sequencec in total
+  const quaterLen = 500;
   const [seqStart, setSeqStart] = useState(null);
   const [seqEnd, setSeqEnd] = useState(null);
   const [displayStart, setDisplayStart] = useState(null);
@@ -33,7 +33,7 @@ function App() {
 
   // update tool tips when display start or end coords changed
   useEffect(() => {
-    const t = range(displayStart, displayStart+halfLen); setToolTips(t);
+    const t = range(displayStart, displayStart + halfLen); setToolTips(t);
     // console.log("update tooltips:");
   }, [displayStart]);
 
@@ -54,13 +54,16 @@ function App() {
   // load initial sequence
   useEffect(() => {
     const init = async () => {
-      const start = coordinate - halfLen;
-      const end = coordinate + halfLen; // seqstr exclude last char
+      // starting seq len 2k
+      const start = coordinate - halfLen * 2;
+      const end = coordinate + halfLen * 2; // seqstr exclude last char
+      const disStart = coordinate - quaterLen;
+      const disEnd = coordinate + quaterLen;
       // temp sequence
       const seq = await fetchSequence(start, end);
-      setSequence(seq); setDisplaySequence(seq.slice(quaterLen, -quaterLen));
+      setSequence(seq); setDisplaySequence(seq.slice(disStart - start, disEnd - start));
       setSeqStart(start); setSeqEnd(end);
-      setDisplayStart(start+quaterLen); setDisplayEnd(end-quaterLen);
+      setDisplayStart(disStart); setDisplayEnd(disEnd);
 
       // scroll to 50%
       setTimeout(() => {
@@ -89,7 +92,7 @@ function App() {
       // shift display window to the left by quaterLen (250)
       const newDisplayStart = displayStart - quaterLen;
       const newDisplayEnd = displayEnd - quaterLen;
-      const newDisplaySequence = sequence.slice(newDisplayStart-seqStart, newDisplayEnd-seqStart);
+      const newDisplaySequence = sequence.slice(newDisplayStart - seqStart, newDisplayEnd - seqStart);
       setDisplaySequence(newDisplaySequence);
       // update display Start and End after setting the sequence, or else it'll reset it with new start and end
       setTimeout(() => {
@@ -102,7 +105,6 @@ function App() {
         }
       }, 10);
 
-      
       console.log({
         newDisplayStart,
         newDisplayEnd,
@@ -110,22 +112,22 @@ function App() {
         sliceEnd: newDisplayStart - seqStart + halfLen,
         replacing: isReplacing,
       });
-      
+
     } else if (scrollPercent > 0.95 && !isReplacing) { // scroll past right edge
       setIsReplacing(true);
       // shift display window to the right by quaterLen
       const newDisplayStart = displayStart + quaterLen;
       const newDisplayEnd = displayEnd + quaterLen;
-      const newDisplaySequence = sequence.slice(newDisplayStart-seqStart, newDisplayEnd-seqStart);
+      const newDisplaySequence = sequence.slice(newDisplayStart - seqStart, newDisplayEnd - seqStart);
       setDisplaySequence(newDisplaySequence);
-      
+
       setTimeout(() => {
         elem.scrollLeft -= 0.5 * elem.scrollWidth; // scroll half of displaySeq len to the left
         setIsReplacing(false);
         setDisplayStart(newDisplayStart); setDisplayEnd(newDisplayEnd);
-        if (newDisplayEnd >= seqEnd) {updateFullSeqRight(newDisplayEnd);} // pad on the right when run out paddings
+        if (newDisplayEnd >= seqEnd) { updateFullSeqRight(newDisplayEnd); } // pad on the right when run out paddings
       }, 10);
-            
+
       console.log({
         newDisplayStart,
         newDisplayEnd,
@@ -176,8 +178,18 @@ function App() {
       <h1 className="text-xl text-center">SeqBro v2</h1>
       {/* sequence box */}
       <div className="relative">
+        
+        {/* Ruler */}
+        <div className="relative pt-3 pb-3 ml-2 mr-2 bg-blue-100 border-b border-gray-300">
+          <div className="absolute pt-1 top-0 left-1/2 transform -translate-x-1/2 text-xs text-blue-600">
+            {displayCenter}
+          </div>
+          {/* tick at middle */}
+          <div className="absolute top-5 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
+        </div>
+
         <div
-          className="bg-gray-50 pt-5 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
+          className="bg-gray-50 pt-1 pb-2 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
           ref={seqBoxRef}
           onScroll={handleScroll}
           style={{ whiteSpace: "nowrap" }}
@@ -192,7 +204,7 @@ function App() {
             ))
             : "Loading...."}
           {/* Center line for debug */}
-          <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
+          {/* <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div> */}
         </div>
       </div>
 
