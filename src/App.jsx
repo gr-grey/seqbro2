@@ -32,8 +32,8 @@ function App() {
 
   // update tool tips when start, end or center coords changed
   useEffect(() => {
-    const t = range(seqStart, seqEnd); setToolTips(t);
-  }, [seqStart, seqEnd]);
+    const t = range(displayStart, displayEnd); setToolTips(t);
+  }, [displayStart, displayEnd]);
 
   const fetchSequence = async (start, end) => {
     const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`;
@@ -56,8 +56,9 @@ function App() {
       const end = coordinate + halfLen; // seqstr exclude last char
       // temp sequence
       const seq = await fetchSequence(start, end);
-      setSequence(seq);
+      setSequence(seq); setDisplaySequence(seq.slice(halfLen/2, -halfLen/2));
       setSeqStart(start); setSeqEnd(end);
+      setDisplayStart(start+halfLen/2); setDisplayEnd(end-halfLen/2);
 
       // scroll to 50%
       setTimeout(() => {
@@ -73,9 +74,9 @@ function App() {
     const elem = seqBoxRef.current;
     const leftEnd = elem.scrollWidth - elem.clientWidth;
     const scrollPercent = elem.scrollLeft / leftEnd;
-    const visibleSeqLen = halfLen * 2 / elem.scrollWidth * elem.clientWidth;
+    const visibleSeqLen = halfLen / elem.scrollWidth * elem.clientWidth;
 
-    const center = Math.round(seqStart + (halfLen * 2 - visibleSeqLen) * scrollPercent + 0.5 * visibleSeqLen);
+    const center = Math.round(displayStart + (halfLen - visibleSeqLen) * scrollPercent + 0.5 * visibleSeqLen);
     setDisplayCenter(center);
   };
 
@@ -102,10 +103,10 @@ function App() {
           onScroll={handleScroll}
           style={{ whiteSpace: "nowrap" }}
         >
-          {sequence
-            ? sequence.split("").map((char, index) => (
+          {displaySequence
+            ? displaySequence.split("").map((char, index) => (
               <Tippy content={tooltips[index]} key={index}>
-                <span style={{ backgroundColor: getBackgroundColor(index, sequence.length) }} >
+                <span style={{ backgroundColor: getBackgroundColor(index, displaySequence.length) }} >
                   {char}
                 </span>
               </Tippy>
