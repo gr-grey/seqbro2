@@ -22,8 +22,6 @@ function App() {
   const [displayCenter, setDisplayCenter] = useState(coordinate);
   const [tooltips, setToolTips] = useState([]);
 
-
-
   const seqBoxRef = useRef(null);
 
   // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
@@ -90,9 +88,8 @@ function App() {
       setIsReplacing(true);
       // shift display window to the left by quaterLen (250)
       const newDisplayStart = displayStart - quaterLen;
-      const newDisplayEnd = displayStart - quaterLen + halfLen; // display seq len is halfLen
-      const newDisplaySequence = sequence.slice(newDisplayStart-seqStart, newDisplayStart-seqStart+halfLen);
-      // console.log(displaySequence);
+      const newDisplayEnd = displayEnd - quaterLen;
+      const newDisplaySequence = sequence.slice(newDisplayStart-seqStart, newDisplayEnd-seqStart);
       setDisplaySequence(newDisplaySequence);
       // update display Start and End after setting the sequence, or else it'll reset it with new start and end
       setTimeout(() => {
@@ -101,9 +98,10 @@ function App() {
         setDisplayStart(newDisplayStart); setDisplayEnd(newDisplayEnd);
         // update full seq by padding more to the left
         if (newDisplayStart <= seqStart) {
-          fetchAndUpdateFullSequence(newDisplayStart);
+          updateFullSeqLeft(newDisplayStart);
         }
       }, 10);
+
       
       console.log({
         newDisplayStart,
@@ -113,15 +111,49 @@ function App() {
         replacing: isReplacing,
       });
       
-    };
+    } else if (scrollPercent > 0.95 && !isReplacing) { // scroll past right edge
+      setIsReplacing(true);
+      // shift display window to the right by quaterLen
+      const newDisplayStart = displayStart + quaterLen;
+      const newDisplayEnd = displayEnd + quaterLen;
+      const newDisplaySequence = sequence.slice(newDisplayStart-seqStart, newDisplayEnd-seqStart);
+      setDisplaySequence(newDisplaySequence);
+      
+      setTimeout(() => {
+        elem.scrollLeft -= 0.5 * elem.scrollWidth; // scroll half of displaySeq len to the left
+        setIsReplacing(false);
+        setDisplayStart(newDisplayStart); setDisplayEnd(newDisplayEnd);
+        if (newDisplayEnd >= seqEnd) {updateFullSeqRight(newDisplayEnd);} // pad on the right when run out paddings
+      }, 10);
+            
+      console.log({
+        newDisplayStart,
+        newDisplayEnd,
+        sliceStart: newDisplayStart - seqStart,
+        sliceEnd: newDisplayStart - seqStart + halfLen,
+        replacing: isReplacing,
+      });
+
+    }
   };
 
-  const fetchAndUpdateFullSequence = async (newDisplayStart) => {
+  const updateFullSeqLeft = async (newDisplayStart) => {
     // Fetch additional sequence to pad on the left
     try {
       const padLeftSeq = await fetchSequence(newDisplayStart - quaterLen, newDisplayStart);
       setSequence((prevSequence) => padLeftSeq + prevSequence); // Prepend fetched sequence
       setSeqStart((prevSeqStart) => prevSeqStart - quaterLen); // Adjust seqStart
+    } catch (error) {
+      console.error("Error fetching additional sequence:", error);
+    }
+  };
+
+  const updateFullSeqRight = async (newDisplayEnd) => {
+    // Fetch additional sequence to pad on the right
+    try {
+      const padRightSeq = await fetchSequence(newDisplayEnd, newDisplayEnd + quaterLen);
+      setSequence((prevSequence) => prevSequence + padRightSeq); // Append fetched sequence
+      setSeqEnd((prevSeqEnd) => prevSeqEnd + quaterLen); // Adjust seqStart
     } catch (error) {
       console.error("Error fetching additional sequence:", error);
     }
@@ -169,12 +201,12 @@ function App() {
         <ul className="space-y-2 text-sm">
           <li><span> Genome:</span> {genome}</li>
           <li><span> Chromosome:</span> {chromosome}   </li>
-          <li><span> Full seq Start - Center - End (zero based, exclude last) coordinate:</span> {seqStart} - {coordinate} - {seqEnd}</li>
           <li><span> strand:</span> {strand}</li>
+          <li><span> Full seq Start - End (zero based, exclude last) coordinate:</span> {seqStart} - {seqEnd}</li>
 
-          <li><span> seq length:</span> {sequence.length}; <span> display seq length:</span> {displaySequence.length}</li>
+          <li><span> Full seq length:</span> {sequence.length}; <span> display seq length:</span> {displaySequence.length}</li>
 
-          <li><span> display start - center end:</span> {displayStart} - {coordinate} - {displayEnd}</li>
+          <li><span> display start end:</span> {displayStart} - {displayEnd}</li>
 
           <li><span> display center:</span> {displayCenter}</li>
 
