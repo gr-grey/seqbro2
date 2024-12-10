@@ -13,6 +13,7 @@ function App() {
 
   const [sequence, setSequence] = useState("");
   const halfLen = 500; // retrieve center -/+ 500, 1001 sequencec in total
+  const quaterLen = 250;
   const [seqStart, setSeqStart] = useState(null);
   const [seqEnd, setSeqEnd] = useState(null);
   const [displayStart, setDisplayStart] = useState(null);
@@ -20,6 +21,8 @@ function App() {
   const [displaySequence, setDisplaySequence] = useState("");
   const [displayCenter, setDisplayCenter] = useState(coordinate);
   const [tooltips, setToolTips] = useState([]);
+
+
 
   const seqBoxRef = useRef(null);
 
@@ -30,10 +33,11 @@ function App() {
       (_, i) => start + i * step,
     );
 
-  // update tool tips when start, end or center coords changed
+  // update tool tips when display start or end coords changed
   useEffect(() => {
-    const t = range(displayStart, displayEnd); setToolTips(t);
-  }, [displayStart, displayEnd]);
+    const t = range(displayStart, displayStart+halfLen); setToolTips(t);
+    // console.log("update tooltips:");
+  }, [displayStart]);
 
   const fetchSequence = async (start, end) => {
     const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`;
@@ -56,9 +60,9 @@ function App() {
       const end = coordinate + halfLen; // seqstr exclude last char
       // temp sequence
       const seq = await fetchSequence(start, end);
-      setSequence(seq); setDisplaySequence(seq.slice(halfLen/2, -halfLen/2));
+      setSequence(seq); setDisplaySequence(seq.slice(quaterLen, -quaterLen));
       setSeqStart(start); setSeqEnd(end);
-      setDisplayStart(start+halfLen/2); setDisplayEnd(end-halfLen/2);
+      setDisplayStart(start+quaterLen); setDisplayEnd(end-quaterLen);
 
       // scroll to 50%
       setTimeout(() => {
@@ -69,7 +73,10 @@ function App() {
     init();
   }, []);
 
-  const handleScroll = () => {
+  // Track if sequence is being replaced
+  const [isReplacing, setIsReplacing] = useState(false);
+
+  const handleScroll = async () => {
 
     const elem = seqBoxRef.current;
     const leftEnd = elem.scrollWidth - elem.clientWidth;
@@ -78,6 +85,46 @@ function App() {
 
     const center = Math.round(displayStart + (halfLen - visibleSeqLen) * scrollPercent + 0.5 * visibleSeqLen);
     setDisplayCenter(center);
+
+    if (scrollPercent < 0.05 && !isReplacing) { // scroll past left edge
+      setIsReplacing(true);
+      // shift display window to the left by quaterLen (250)
+      const newDisplayStart = displayStart - quaterLen;
+      const newDisplayEnd = displayStart - quaterLen + halfLen; // display seq len is halfLen
+      const newDisplaySequence = sequence.slice(newDisplayStart-seqStart, newDisplayStart-seqStart+halfLen);
+      // console.log(displaySequence);
+      setDisplaySequence(newDisplaySequence);
+      // update display Start and End after setting the sequence, or else it'll reset it with new start and end
+      setTimeout(() => {
+        elem.scrollLeft += 0.5 * elem.scrollWidth; // scroll 250 char (half of displaySeq len) to the right
+        setIsReplacing(false);
+        setDisplayStart(newDisplayStart); setDisplayEnd(newDisplayEnd);
+        // update full seq by padding more to the left
+        if (newDisplayStart <= seqStart) {
+          fetchAndUpdateFullSequence(newDisplayStart);
+        }
+      }, 10);
+      
+      console.log({
+        newDisplayStart,
+        newDisplayEnd,
+        sliceStart: newDisplayStart - seqStart,
+        sliceEnd: newDisplayStart - seqStart + halfLen,
+        replacing: isReplacing,
+      });
+      
+    };
+  };
+
+  const fetchAndUpdateFullSequence = async (newDisplayStart) => {
+    // Fetch additional sequence to pad on the left
+    try {
+      const padLeftSeq = await fetchSequence(newDisplayStart - quaterLen, newDisplayStart);
+      setSequence((prevSequence) => padLeftSeq + prevSequence); // Prepend fetched sequence
+      setSeqStart((prevSeqStart) => prevSeqStart - quaterLen); // Adjust seqStart
+    } catch (error) {
+      console.error("Error fetching additional sequence:", error);
+    }
   };
 
   // Add background color for beginning, middle and end of sequence for debug
@@ -138,6 +185,9 @@ function App() {
             <div className="block max-w-2xl px-2 border border-gray-200 rounded-md break-words text-gray-700 text-wrap font-mono mt-2">{sequence}</div>
           </li>
 
+          <li><span> display seq:</span>
+            <div className="block max-w-2xl px-2 border border-gray-200 rounded-md break-words text-gray-700 text-wrap font-mono mt-2">{displaySequence}</div>
+          </li>
         </ul>
       </div>
     </>
