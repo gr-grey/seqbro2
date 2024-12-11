@@ -64,7 +64,7 @@ function App() {
   useEffect(() => {
     const init = async () => {
       // starting seq len 4k, needs to be larger than display len
-      const initHalfLen = 2000;
+      const initHalfLen = 1000;
       const start = coordinate - initHalfLen;
       const end = coordinate + initHalfLen; // seqstr exclude last char
       const disStart = coordinate - scrollHalfLen;
@@ -114,6 +114,43 @@ function App() {
       if (seqBoxRef.current) { observer.unobserve(seqBoxRef.current); }
     };
   }, [seqBoxRef]);
+
+
+  // Remap the mouse scrolling up and down to left and right
+  // within SequenceBox
+  useEffect(() => {
+    const handleWheel = (event) => {
+      // if mouse is inside sequenceBox
+      if (seqBoxRef.current && seqBoxRef.current.contains(event.target)) {
+        // deltaX is horizontal scroll, delta Y vertical
+        // detect if the scrolling is dominated by vertical, if yes, remap to horizontal
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+          event.preventDefault();
+          seqBoxRef.current.scrollLeft += event.deltaY; // Map vertical scroll to horizontal
+        }
+      }
+    };
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    return () => { window.removeEventListener("wheel", handleWheel); };
+  }, []);
+
+  // left < and right > buttons with continuous scrolling
+  const [scrollInterval, setScrollInterval] = useState(null);
+  const startScrolling = (direction) => {
+    if (!scrollInterval) {
+      const interval = setInterval(() => {
+        if (seqBoxRef.current) { seqBoxRef.current.scrollLeft += direction; } // use positive dir to scroll right, neg to scroll left
+      }, 50); // adjust interval for smoothness
+      setScrollInterval(interval);
+    }
+  };
+  const stopScrolling = () => {
+    if (scrollInterval) {
+      clearInterval(scrollInterval);
+      setScrollInterval(null);
+    }
+  };
+
 
   const handleScroll = async () => {
 
@@ -200,11 +237,11 @@ function App() {
 
   // Add background color for beginning, middle and end of sequence for debug
   const getBackgroundColor = (index, seqLength) => {
-    if (index < 30) {
+    if (index < scrollLen * 0.06) {
       return "yellow"; // First 50 characters
     } else if (index === Math.floor(seqLength / 2)) {
       return "red"; // Middle character
-    } else if (index >= seqLength - 30) {
+    } else if (index >= seqLength - scrollLen * 0.06) {
       return "green"; // Last 50 characters
     }
     return "transparent"; // Default background
@@ -212,16 +249,55 @@ function App() {
 
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
+
   return (
     <>
       <h1 className="text-xl text-center">SeqBro v2</h1>
       {/* sequence box */}
       <div className="relative">
+        <div className="flex ml-2 mb-2">
+          <button
+            onMouseDown={() => startScrolling(-30)} // scroll left
+            onMouseUp={stopScrolling}
+            onMouseLeave={stopScrolling}
+            className="px-1 mt-1 mr-1 bg-gray-50 border rounded-lg hover:bg-gray-200 text-xs"
+          >
+            &lt; {/* Left Arrow */}
+          </button>
+          <button
+            onMouseDown={() => startScrolling(30)} // scroll right
+            onMouseUp={stopScrolling}
+            onMouseLeave={stopScrolling}
+            className="px-1 mt-1 mr-1 bg-gray-50 border rounded-lg hover:bg-gray-200 text-xs"
+          >
+            &gt; {/* Right Arrow */}
+          </button>
+        </div>
 
         {/* Ruler */}
-        <div className="relative pt-3 pb-3 ml-2 mr-2 bg-white border-b border-gray-300">
+        <div className="relative pt-3 pb-3 ml-2 mr-2 bg-white border-b border-gray-800">
+          <div className="absolute pt-1 top-0 text-xs text-blue-600"
+            style={{ left: "0%", transform: "translateX(0%)" }}
+          >
+            {Math.round(displayCenter - viewSeqLen / 2)}
+          </div>
+          <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
+            style={{ left: "25%" }}
+          >
+            {Math.round(displayCenter - viewSeqLen / 4)}
+          </div>
           <div className="absolute pt-1 top-0 left-1/2 transform -translate-x-1/2 text-xs text-blue-600">
             {displayCenter}
+          </div>
+          <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
+            style={{ left: "75%" }}
+          >
+            {Math.round(displayCenter + viewSeqLen / 4)}
+          </div>
+          <div className="absolute pt-1 top-0 text-xs text-blue-600"
+            style={{ left: "100%", transform: "translateX(-100%)" }}
+          >
+            {Math.round(displayCenter + viewSeqLen / 2)}
           </div>
           {/* ticks */}
           {ticks.map((pos, index) => (
