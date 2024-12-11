@@ -21,8 +21,8 @@ function App() {
   const [displayStart, setDisplayStart] = useState(null);
   const [displayEnd, setDisplayEnd] = useState(null);
   const [displaySequence, setDisplaySequence] = useState("");
-  const [displayCenter, setDisplayCenter] = useState(coordinate);
-  const [tooltips, setToolTips] = useState([]);
+  const [viewCenterCoord, setviewCenterCoord] = useState(coordinate);
+  const [toolTips, setToolTips] = useState([]);
 
   const seqBoxRef = useRef(null);
 
@@ -32,6 +32,12 @@ function App() {
   const [clientWidth, setClientWidth] = useState(0);
   // how many chars are in the sequence box window viewing window
   const [viewSeqLen, setViewSeqLen] = useState(0);
+
+  const oneKBoxRef = useRef(null);
+  const [oneKFullSeq, setOneKFullSeq] = useState("");
+  const [oneKSeqWidth, setOneKSeqWidth] = useState(0);
+  const [syncScrollPercent, setSyncScrollPercent] = useState(0);
+  const [oneKToolTips, setOneKToolTips] = useState([]);
 
   // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
   const range = (start, stop, step = 1) =>
@@ -43,8 +49,10 @@ function App() {
   // update tool tips when display start or end coords changed
   useEffect(() => {
     const t = range(displayStart, displayStart + scrollLen); setToolTips(t);
-    // console.log("update tooltips:");
-  }, [displayStart]);
+    // One K tooltips
+    const oneKPadLen = 500 - Math.round(viewSeqLen / 2);
+    const t2 = range(displayStart - oneKPadLen, displayStart + scrollLen + oneKPadLen); setOneKToolTips(t2);
+  }, [displayStart, viewSeqLen]);
 
   const fetchSequence = async (start, end) => {
     const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`;
@@ -75,7 +83,7 @@ function App() {
       setSeqStart(start); setSeqEnd(end);
       setDisplayStart(disStart); setDisplayEnd(disEnd);
 
-      // scroll to 50%
+      // load sequence and set scrolling widths params
       setTimeout(() => {
         if (seqBoxRef.current) {
           setScrollWidth(seqBoxRef.current.scrollWidth);
@@ -92,17 +100,43 @@ function App() {
     if (seqBoxRef.current) {
       const halfway = (scrollWidth - clientWidth) / 2;
       seqBoxRef.current.scrollLeft = halfway;
+      // set percent for 1k seq to sync to
+      setSyncScrollPercent(0.5);
+
       // init viewing char number as well
-      setViewSeqLen(scrollLen / scrollWidth * seqBoxRef.current.clientWidth);
+      const viewLen = scrollLen / scrollWidth * clientWidth;
+      setViewSeqLen(viewLen);
+      // calculate 1k seq len
+      setOneKSeqWidth(clientWidth / 1000);
+
+      // set one K view sequence
+      // pad=500 + scrollHalfLen - Math.round(viewLen/2) - scrollHalfLen
+      const oneKPadLen = 500 - Math.round(viewLen / 2);
+      const oneKStart = displayStart - oneKPadLen;
+      const oneKEnd = displayEnd + oneKPadLen;
+      setOneKFullSeq(sequence.slice(oneKStart - seqStart, oneKEnd - seqEnd));
+
+    // Delay scroll to oneKBox to ensure fullSeq update is complete
+    setTimeout(() => {
+      if (oneKBoxRef.current) {
+        const oneKBox = oneKBoxRef.current;
+
+        // Calculate and set the middle scroll position
+        const oneKScrollWidth = oneKBox.scrollWidth - oneKBox.clientWidth;
+        oneKBox.scrollLeft = oneKScrollWidth * 0.5;
+      }
+    }, 10); // Adjust timeout if necessary
     }
   }, [scrollWidth]);
-
 
   // update sequence box size dimensions
   const updateSeqBoxWidths = () => {
     if (seqBoxRef.current) {
+      // scrollWidth is fixed once the first display seq is loaded
       setClientWidth(seqBoxRef.current.clientWidth);
-      setViewSeqLen(scrollLen / scrollWidth * seqBoxRef.current.clientWidth);
+      const viewLen = scrollLen / scrollWidth * seqBoxRef.current.clientWidth;
+      setViewSeqLen(viewLen);
+      setOneKSeqWidth(seqBoxRef.current.clientWidth / 1000);
     }
   };
 
@@ -151,6 +185,15 @@ function App() {
     }
   };
 
+  // sync 1k box with char level box
+  useEffect(() => {
+    if (oneKBoxRef.current && seqBoxRef.current) {
+      const oneKBox = oneKBoxRef.current;
+      const oneKScrollWidth = oneKBox.scrollWidth - oneKBox.clientWidth; // Total scrollable width
+      const newScrollLeft = syncScrollPercent * oneKScrollWidth; // Calculate the scrollLeft value
+      oneKBox.scrollLeft = newScrollLeft; // Sync the scroll position
+    }
+  }, [syncScrollPercent]); // Run effect when syncScrollPercent changes
 
   const handleScroll = async () => {
 
@@ -159,7 +202,10 @@ function App() {
     const scrollPercent = elem.scrollLeft / leftEnd;
 
     const center = Math.round(displayStart + (scrollLen - viewSeqLen) * scrollPercent + 0.5 * viewSeqLen);
-    setDisplayCenter(center);
+    setviewCenterCoord(center);
+
+    // record scroll percent for 1k to sync to
+    setSyncScrollPercent(scrollPercent);
 
     if (scrollPercent < 0.05 && !isReplacing) { // scroll past left edge
       setIsReplacing(true);
@@ -247,8 +293,22 @@ function App() {
     return "transparent"; // Default background
   };
 
-  const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
+  const colorByName = (char) => {
+    switch (char) {
+      case "A":
+        return "green";
+      case "G":
+        return "orange";
+      case "C":
+        return "red";
+      case "T":
+        return "blue";
+      default:
+        return "transparent"; // Default for any non-AGCT character
+    }
+  };
 
+  const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
   return (
     <>
@@ -279,25 +339,25 @@ function App() {
           <div className="absolute pt-1 top-0 text-xs text-blue-600"
             style={{ left: "0%", transform: "translateX(0%)" }}
           >
-            {Math.round(displayCenter - viewSeqLen / 2)}
+            {Math.round(viewCenterCoord - viewSeqLen / 2)}
           </div>
           <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
             style={{ left: "25%" }}
           >
-            {Math.round(displayCenter - viewSeqLen / 4)}
+            {Math.round(viewCenterCoord - viewSeqLen / 4)}
           </div>
           <div className="absolute pt-1 top-0 left-1/2 transform -translate-x-1/2 text-xs text-blue-600">
-            {displayCenter}
+            {viewCenterCoord}
           </div>
           <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
             style={{ left: "75%" }}
           >
-            {Math.round(displayCenter + viewSeqLen / 4)}
+            {Math.round(viewCenterCoord + viewSeqLen / 4)}
           </div>
           <div className="absolute pt-1 top-0 text-xs text-blue-600"
             style={{ left: "100%", transform: "translateX(-100%)" }}
           >
-            {Math.round(displayCenter + viewSeqLen / 2)}
+            {Math.round(viewCenterCoord + viewSeqLen / 2)}
           </div>
           {/* ticks */}
           {ticks.map((pos, index) => (
@@ -315,7 +375,7 @@ function App() {
         >
           {displaySequence
             ? displaySequence.split("").map((char, index) => (
-              <Tippy content={tooltips[index]} key={index}>
+              <Tippy content={toolTips[index]} key={index}>
                 <span style={{ backgroundColor: getBackgroundColor(index, displaySequence.length) }} >
                   {char}
                 </span>
@@ -323,30 +383,77 @@ function App() {
             ))
             : "Loading...."}
           {/* Center line for debug */}
-          {/* <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div> */}
+          <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
         </div>
+
+        {/* 1k sequence squeezed and only showing colors */}
+
+        <div className="flex ml-2 mb-2">
+          <span>1k view: </span>
+          <span className="text-[#008000]" > A</span>
+          <span className="text-[#FFA500]" > C</span>
+          <span className="text-[#FF0000]" > G</span>
+          <span className="text-[#0000FF]" > T</span>
+        </div>
+
+        <div
+          className="bg-gray-50 pt-1 pb-1 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
+          style={{
+            whiteSpace: "nowrap",
+            overflow: "hidden", // Disable user scrolling
+          }}
+          ref={oneKBoxRef}
+        >
+          {oneKFullSeq
+            ? oneKFullSeq.split("").map((char, index) => (
+              <Tippy content={`${oneKToolTips[index]} ${char}`} key={index}>
+                <span style={{
+                  backgroundColor: colorByName(char),
+                  display: "inline-block",
+                  width: `${oneKSeqWidth}px`,
+                  height: "10px",
+                }} >
+                  {" "}
+                </span>
+              </Tippy>
+            ))
+            : "Loading...."}
+        </div>
+
+
       </div>
 
       <div className="border-t border-gray-200 mt-2">
         <h1>Debug:</h1>
         <ul className="space-y-2 text-sm">
-          <li><span> --------SeqBox scrolling params---------</span></li>
+          <li><span> --------SeqBox scrolling tracking---------</span></li>
           <li><span> ScrollWidth:</span> {scrollWidth}</li>
           <li><span> ClientWidth:</span> {clientWidth}</li>
           <li><span> viewSeqLen:</span> {viewSeqLen}</li>
+          <li><span> 1k view char width:</span> {oneKSeqWidth}</li>
+          <li><span> scroll percent</span> {syncScrollPercent}</li>
+          {/* <li><span> 1k view seqHalfLen:</span> {oneKSeqHalfLen}</li> */}
+          <li><span> Full seq Start - End (zero based, exclude last) coordinate:</span> {seqStart} - {seqEnd}</li>
+          <li><span> display start end:</span> {displayStart} - {displayEnd}</li>
+
+          <li>
+            <span> Full seq length:</span> {sequence.length};
+            <span> display seq length:</span> {displaySequence.length};
+            <span> one K seq length:</span> {oneKFullSeq.length}
+          </li>
+
+
+          <li><span> display center:</span> {viewCenterCoord}</li>
+
           <li><span> --------Genome forms---------</span></li>
           <li><span> Genome:</span> {genome}</li>
           <li><span> Chromosome:</span> {chromosome}   </li>
           <li><span> strand:</span> {strand}</li>
-          <li><span> Full seq Start - End (zero based, exclude last) coordinate:</span> {seqStart} - {seqEnd}</li>
 
-          <li><span> Full seq length:</span> {sequence.length}; <span> display seq length:</span> {displaySequence.length}</li>
-
-          <li><span> display start end:</span> {displayStart} - {displayEnd}</li>
-
-          <li><span> display center:</span> {displayCenter}</li>
-
-          <li><span> tooltip length</span> {tooltips.length}</li>
+          <li>
+            <span> tooltip length</span> {toolTips.length};
+            <span> One K tooltip length</span> {oneKToolTips.length}
+          </li>
 
           <li><span> full seq:</span>
             {/* mini sequence box */}
