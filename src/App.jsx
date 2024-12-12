@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import './App.css';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
+import DebugPanel from './DebugPanel';
+import NavBar from './NavBar';
 
 function App() {
   // get sequence
@@ -28,7 +30,7 @@ function App() {
   // width of the full seq in seqbox, like 9000px
   const boxSeqFullWidth = useRef(null);
   // seqBox on page, width in px, old clientWidth
-  const boxWdith = useRef(null);
+  const boxWidth = useRef(null);
   // of the 1000 char in seqBox, how many are in view box
   const viewSeqLen = useRef(null);
   // coords at left end of ruler
@@ -89,7 +91,7 @@ function App() {
       // set box widths (client and scroll width) after sequences were set
       setTimeout(() => {
         if (seqBoxRef.current) {
-          boxWdith.current = seqBoxRef.current.clientWidth;
+          boxWidth.current = seqBoxRef.current.clientWidth;
           boxSeqFullWidth.current = seqBoxRef.current.scrollWidth;
           setSeqInited(true);
         }
@@ -102,7 +104,7 @@ function App() {
   useEffect(() => {
     if (seqBoxRef.current && boxSeqFullWidth.current) {
       const full_w = boxSeqFullWidth.current;
-      const view_w = boxWdith.current;
+      const view_w = boxWidth.current;
       const halfway = (full_w - view_w) / 2;
       seqBoxRef.current.scrollLeft = halfway;
       setSyncScrollPercent(0.5);
@@ -116,13 +118,22 @@ function App() {
     }
   }, [seqInited]);
 
-
   // update sequence box size dimensions
   const updateSeqBoxWidths = () => {
     if (seqBoxRef.current) {
       // scrollWidth is fixed once the first display seq is loaded
-      boxWdith.current = seqBoxRef.current.clientWidth;
-      viewSeqLen.current = boxSeqLen / seqBoxRef.current.scrollWidth * seqBoxRef.current.clientWidth;
+      const full_w = boxSeqFullWidth.current;
+      const box_w = seqBoxRef.current.clientWidth;
+      const leftEnd = full_w - box_w;
+      const scrollPercent = seqBoxRef.current.scrollLeft / leftEnd;
+
+      const viewLen = boxSeqLen / full_w * box_w;
+      // coord of first char in view port
+      const viewStartCoord = Math.round(boxStart.current + (boxSeqLen - viewLen) * scrollPercent);
+      boxWidth.current = seqBoxRef.current.clientWidth;
+      viewSeqLen.current = viewLen;
+      setViewStart(viewStartCoord);
+      setSyncScrollPercent(scrollPercent);
     }
   };
 
@@ -138,7 +149,6 @@ function App() {
       if (seqBoxRef.current) { observer.unobserve(seqBoxRef.current); }
     };
   }, [seqBoxRef]);
-
 
   // Remap the mouse scrolling up and down to left and right
   // within SequenceBox
@@ -179,7 +189,7 @@ function App() {
 
     const elem = seqBoxRef.current;
     const full_w = boxSeqFullWidth.current;
-    const box_w = boxWdith.current;
+    const box_w = boxWidth.current;
     const leftEnd = full_w - box_w;
     const scrollPercent = elem.scrollLeft / leftEnd;
     const startCoord = boxStart.current;
@@ -295,9 +305,12 @@ function App() {
 
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
+  // tracking these values
+  const debugVars = {boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips,};
+
   return (
     <>
-      <h1 className="text-xl text-center">SeqBro v2</h1>
+      <NavBar />
       {/* sequence box */}
       <div className="relative">
         <div className="flex ml-2 mb-2">
@@ -327,28 +340,18 @@ function App() {
           >
             {viewStart}
           </div>
-          {/*           
-          <div className="absolute pt-1 top-0 text-xs text-blue-600"
-            style={{ left: "0%", transform: "translateX(0%)" }}
-          >
-            {Math.round(viewCenterCoord - viewSeqLen / 2)}
-          </div>
+
           <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
-            style={{ left: "25%" }}
+            style={{ left: "50%" }}
           >
-            {Math.round(viewCenterCoord - viewSeqLen / 4)}
+            {Math.round(viewStart + viewSeqLen.current/2)}
           </div>
-         
-          <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
-            style={{ left: "75%" }}
-          >
-            {Math.round(viewCenterCoord + viewSeqLen / 4)}
-          </div>
-          <div className="absolute pt-1 top-0 text-xs text-blue-600"
+
+          <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
             style={{ left: "100%", transform: "translateX(-100%)" }}
           >
-            {Math.round(viewCenterCoord + viewSeqLen / 2)}
-          </div> */}
+            {Math.round(viewStart + viewSeqLen.current)}
+          </div>
 
           {ticks.map((pos, index) => (
             <div key={index} className="absolute top-5 bottom-0 w-[3px] bg-blue-500"
@@ -386,45 +389,8 @@ function App() {
         </div>
 
       </div>
-
-      <div className="border-t border-gray-200 mt-2">
-        <h1>Debug:</h1>
-        <ul className="space-y-2 text-sm">
-          <li><span> --------SeqBox scrolling tracking---------</span></li>
-          <li><span> box seq width:</span> {boxSeqFullWidth.current}</li>
-          <li><span> box view width:</span> {boxWdith.current}</li>
-          <li><span> viewSeqLen:</span> {viewSeqLen.current}</li>
-          <li><span> scroll percent</span> {syncScrollPercent}</li>
-          <li>
-            <span> Full seq Start - End (zero based, exclude last) coordinate:</span> 
-            {fullStart.current} - {fullEnd.current}
-          </li>
-          <li><span> Box seq start end:</span> {boxStart.current} - {boxEnd.current}</li>
-          <li>
-            <span> Full seq length:</span> {fullSeq.length};
-            <span> display seq length:</span> {boxSeq.length};
-          </li>
-          <li><span> view start coord:</span> {viewStart}</li>
-
-          <li><span> --------Genome forms---------</span></li>
-          <li><span> Genome:</span> {genome}</li>
-          <li><span> Chromosome:</span> {chromosome}   </li>
-          <li><span> strand:</span> {strand}</li>
-
-          <li>
-            <span> tooltip length</span> {toolTips.length};
-          </li>
-
-          <li><span> full seq:</span>
-            {/* mini sequence box */}
-            <div className="block max-w-2xl px-2 border border-gray-200 rounded-md break-words text-gray-700 text-wrap font-mono mt-2">{fullSeq}</div>
-          </li>
-
-          <li><span> display seq:</span>
-            <div className="block max-w-2xl px-2 border border-gray-200 rounded-md break-words text-gray-700 text-wrap font-mono mt-2">{boxSeq}</div>
-          </li>
-        </ul>
-      </div>
+      <DebugPanel {...debugVars}/>
+     
     </>
   );
 }
