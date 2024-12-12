@@ -4,6 +4,7 @@ import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
 import DebugPanel from './DebugPanel';
 import NavBar from './NavBar';
+import GenomeForm from './GenomeForm';
 
 function App() {
   // get sequence
@@ -11,6 +12,7 @@ function App() {
   const [chromosome, setChromosome] = useState("chr1");
   const [coordinate, setCoordinate] = useState(5530600);
   const [strand, setStrand] = useState('+');
+  const [gene, setGene] = useState('ACTB');
 
   // scrollable content sequence len: 1000 characters
   const boxSeqHalfLen = 500;
@@ -50,12 +52,6 @@ function App() {
       (_, i) => start + i * step,
     );
 
-  // update tool tips when display sequence changed
-  useEffect(() => {
-    const t = range(boxStart.current, boxEnd.current);
-    setToolTips(t);
-  }, [boxSeq]);
-
   // seqstr exclude last char
   const fetchSequence = async (start, end) => {
     const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`;
@@ -73,6 +69,7 @@ function App() {
   // load initial sequence
   useEffect(() => {
     const init = async () => {
+      setSeqInited(false);
       const full_start = coordinate - initHalfLen;
       const full_end = coordinate + initHalfLen;
       const box_start = coordinate - boxSeqHalfLen;
@@ -94,33 +91,36 @@ function App() {
           boxWidth.current = seqBoxRef.current.clientWidth;
           boxSeqFullWidth.current = seqBoxRef.current.scrollWidth;
           setSeqInited(true);
+          // init tooltips
+          setToolTips(range(box_start, box_end));
         }
       }, 10);
     }
     init();
-  }, []);
+  }, [chromosome, coordinate, strand]);
 
   // manually scroll to 50% after sequences were inited
   useEffect(() => {
-    if (seqBoxRef.current && boxSeqFullWidth.current) {
+    if (seqBoxRef.current && boxSeqFullWidth.current && seqInited) {
       const full_w = boxSeqFullWidth.current;
       const view_w = boxWidth.current;
       const halfway = (full_w - view_w) / 2;
       seqBoxRef.current.scrollLeft = halfway;
       setSyncScrollPercent(0.5);
 
-      // init viewing char number as well
-      viewSeqLen.current = boxSeqLen / full_w * view_w;
-      console.log({
-        boxSeqFullWidth: boxSeqFullWidth.current,
-        halfway: halfway,
-      });
+      // init viewing char number
+      const viewLen= boxSeqLen / full_w * view_w;
+      // init view start coord
+      const viewStartCoord = Math.round(boxStart.current + (boxSeqLen - viewLen) * 0.5);
+
+      viewSeqLen.current = viewLen;
+      setViewStart(viewStartCoord);
     }
   }, [seqInited]);
 
   // update sequence box size dimensions
   const updateSeqBoxWidths = () => {
-    if (seqBoxRef.current) {
+    if (seqBoxRef.current && boxSeqFullWidth.current) {
       // scrollWidth is fixed once the first display seq is loaded
       const full_w = boxSeqFullWidth.current;
       const box_w = seqBoxRef.current.clientWidth;
@@ -130,7 +130,9 @@ function App() {
       const viewLen = boxSeqLen / full_w * box_w;
       // coord of first char in view port
       const viewStartCoord = Math.round(boxStart.current + (boxSeqLen - viewLen) * scrollPercent);
-      boxWidth.current = seqBoxRef.current.clientWidth;
+      
+      // update varaibles
+      boxWidth.current = box_w;
       viewSeqLen.current = viewLen;
       setViewStart(viewStartCoord);
       setSyncScrollPercent(scrollPercent);
@@ -220,15 +222,17 @@ function App() {
         if (newBoxStart - 500 <= fullStart.current) {
           updateFullSeqLeft();
         }
+        // update tooltips
+        setToolTips(range(newBoxStart, newBoxEnd));
       }, 10);
 
-      console.log({
-        newBoxStart,
-        newBoxEnd,
-        sliceStart: newBoxStart - fullStart.current,
-        sliceEnd: newBoxEnd - fullStart.current,
-        replacing: isReplacing,
-      });
+      // console.log({
+      //   newBoxStart,
+      //   newBoxEnd,
+      //   sliceStart: newBoxStart - fullStart.current,
+      //   sliceEnd: newBoxEnd - fullStart.current,
+      //   replacing: isReplacing,
+      // });
 
     } else if (scrollPercent > 0.95 && !isReplacing) { // scroll past right edge
       setIsReplacing(true);
@@ -248,15 +252,9 @@ function App() {
         if (newBoxEnd + 500 >= fullEnd.current) {
           updateFullSeqRight();
         }
+        // update tooltips
+        setToolTips(range(newBoxStart, newBoxEnd));
       }, 10);
-
-      console.log({
-        newBoxStart,
-        newBoxEnd,
-        sliceStart: newBoxStart - fullStart.current,
-        sliceEnd: newBoxEnd - fullStart.current,
-        replacing: isReplacing,
-      });
 
     }
   };
@@ -265,10 +263,8 @@ function App() {
     // Fetch additional sequence to pad on the left
     try {
       const start = fullStart.current;
-
       // retrive 1000 (padding len) left to the current starting coord
       const padLeftSeq = await fetchSequence(start - paddingLen, start);
-
       setFullSeq((prevSequence) => padLeftSeq + prevSequence); // Prepend fetched sequence
       fullStart.current = start - paddingLen; // Adjust seqStart
     } catch (error) {
@@ -306,91 +302,102 @@ function App() {
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
   // tracking these values
-  const debugVars = {boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips,};
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, };
+
+  const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
   return (
     <>
       <NavBar />
-      {/* sequence box */}
-      <div className="relative">
-        <div className="flex ml-2 mb-2">
-          <button
-            onMouseDown={() => startScrolling(-30)} // scroll left
-            onMouseUp={stopScrolling}
-            onMouseLeave={stopScrolling}
-            className="px-1 mt-1 mr-1 bg-gray-50 border rounded-lg hover:bg-gray-200 text-xs"
-          >
-            &lt; {/* Left Arrow */}
-          </button>
-          <button
-            onMouseDown={() => startScrolling(30)} // scroll right
-            onMouseUp={stopScrolling}
-            onMouseLeave={stopScrolling}
-            className="px-1 mt-1 mr-1 bg-gray-50 border rounded-lg hover:bg-gray-200 text-xs"
-          >
-            &gt; {/* Right Arrow */}
-          </button>
+      <div className="flex h-screen">
+        {/* Left side of screen 1/4 or max-80 */}
+        <div className="w-1/4 max-w-[20rem] border-r border-gray-300 p-4">
+          <GenomeForm {...genomeFormVars} />
         </div>
 
-        {/* Ruler */}
-        <div className="relative pt-3 pb-3 ml-2 mr-2 bg-white border-b border-gray-800">
-
-          <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
-            style={{ left: "0%", transform: "translateX(0%)" }}
-          >
-            {viewStart}
-          </div>
-
-          <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
-            style={{ left: "50%" }}
-          >
-            {Math.round(viewStart + viewSeqLen.current/2)}
-          </div>
-
-          <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
-            style={{ left: "100%", transform: "translateX(-100%)" }}
-          >
-            {Math.round(viewStart + viewSeqLen.current)}
-          </div>
-
-          {ticks.map((pos, index) => (
-            <div key={index} className="absolute top-5 bottom-0 w-[3px] bg-blue-500"
-              style={{ left: `${pos}%` }}
-            ></div>
-          ))}
-        </div>
-
-        <div
-          className="bg-gray-50 pt-1 pb-2 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
-          ref={seqBoxRef}
-          onScroll={handleScroll}
-          style={{ whiteSpace: "nowrap" }}
-        >
-          {boxSeq
-            ? boxSeq.split("").map((char, index) => (
-              // <Tippy content={toolTips[index]} key={index}>
-              //   <span style={{ backgroundColor: getBackgroundColor(index, displaySequence.length) }} >
-              //     {char}
-              //   </span>
-              // </Tippy>
-              // vanila tooltips
-              <span
-                key={index}
-                className="inline-block"
-                title={toolTips[index]} // Native tooltip with coordinate
-                style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }}
+        {/* Right side */}
+        <div className="w-3/4 flex-grow p-2 relative overflow-visible">
+          {/* sequence box */}
+          <div className="relative">
+            <div className="flex ml-2 mb-2">
+              <button
+                onMouseDown={() => startScrolling(-30)} // scroll left
+                onMouseUp={stopScrolling}
+                onMouseLeave={stopScrolling}
+                className="px-1 mt-1 mr-1 bg-gray-50 border rounded-lg hover:bg-gray-200 text-xs"
               >
-                {char}
-              </span>
-            ))
-            : "Loading...."}
-          {/* Center line for debug */}
-          <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
-        </div>
+                &lt; {/* Left Arrow */}
+              </button>
+              <button
+                onMouseDown={() => startScrolling(30)} // scroll right
+                onMouseUp={stopScrolling}
+                onMouseLeave={stopScrolling}
+                className="px-1 mt-1 mr-1 bg-gray-50 border rounded-lg hover:bg-gray-200 text-xs"
+              >
+                &gt; {/* Right Arrow */}
+              </button>
+            </div>
 
+            {/* Ruler */}
+            <div className="relative pt-3 pb-3 ml-2 mr-2 bg-white border-b border-gray-800">
+
+              <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
+                style={{ left: "0%", transform: "translateX(0%)" }}
+              >
+                {viewStart}
+              </div>
+
+              <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
+                style={{ left: "50%" }}
+              >
+                {Math.round(viewStart + viewSeqLen.current / 2)}
+              </div>
+
+              <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
+                style={{ left: "100%", transform: "translateX(-100%)" }}
+              >
+                {Math.round(viewStart + viewSeqLen.current)}
+              </div>
+
+              {ticks.map((pos, index) => (
+                <div key={index} className="absolute top-5 bottom-0 w-[3px] bg-blue-500"
+                  style={{ left: `${pos}%` }}
+                ></div>
+              ))}
+            </div>
+
+            <div
+              className="bg-gray-50 pt-1 pb-2 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
+              ref={seqBoxRef}
+              onScroll={handleScroll}
+              style={{ whiteSpace: "nowrap" }}
+            >
+              {boxSeq
+                ? boxSeq.split("").map((char, index) => (
+                  // <Tippy content={toolTips[index]} key={index}>
+                  //   <span style={{ backgroundColor: getBackgroundColor(index, displaySequence.length) }} >
+                  //     {char}
+                  //   </span>
+                  // </Tippy>
+                  // vanila tooltips
+                  <span
+                    key={index}
+                    className="inline-block"
+                    title={toolTips[index]} // Native tooltip with coordinate
+                    style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }}
+                  >
+                    {char}
+                  </span>
+                ))
+                : "Loading...."}
+              {/* Center line for debug */}
+              <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
+            </div>
+
+          </div>
+          <DebugPanel {...debugVars} />
+        </div>
       </div>
-      <DebugPanel {...debugVars}/>
-     
     </>
   );
 }
