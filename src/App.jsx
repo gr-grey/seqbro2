@@ -10,30 +10,36 @@ function App() {
   const [coordinate, setCoordinate] = useState(5530600);
   const [strand, setStrand] = useState('+');
 
-  const [sequence, setSequence] = useState("");
   // scrollable content sequence len: 1000 characters
-  const scrollHalfLen = 500;
-  const scrollLen = 1000; // retrieve center -/+ 500, 1001 sequencec in total
+  const boxSeqHalfLen = 500;
+  const boxSeqLen = 2 * boxSeqHalfLen;
   // pad 1000 char at a time
   const paddingLen = 1000;
-  const [seqStart, setSeqStart] = useState(null);
-  const [seqEnd, setSeqEnd] = useState(null);
-  const [displayStart, setDisplayStart] = useState(null);
-  const [displayEnd, setDisplayEnd] = useState(null);
-  const [displaySequence, setDisplaySequence] = useState("");
-  const [viewCenterCoord, setviewCenterCoord] = useState(coordinate);
-  const [toolTips, setToolTips] = useState([]);
+  // starting seq len 3k, display middle 1k in box
+  // left and right each has 1k padding
+  const initHalfLen = 1000;
+
+  const fullStart = useRef(null); const fullEnd = useRef(null);
+  const boxStart = useRef(null); const boxEnd = useRef(null);
+  const [fullSeq, setFullSeq] = useState("");
+  const [boxSeq, setBoxSeq] = useState("");
 
   const seqBoxRef = useRef(null);
+  // width of the full seq in seqbox, like 9000px
+  const boxSeqFullWidth = useRef(null);
+  // seqBox on page, width in px, old clientWidth
+  const boxWdith = useRef(null);
+  // of the 1000 char in seqBox, how many are in view box
+  const viewSeqLen = useRef(null);
+  // coords at left end of ruler
+  const [viewStart, setViewStart] = useState(null);
 
   // Track if sequence is being replaced
   const [isReplacing, setIsReplacing] = useState(false);
-  const [scrollWidth, setScrollWidth] = useState(0);
-  const [clientWidth, setClientWidth] = useState(0);
-  // how many chars are in the sequence box window viewing window
-  const [viewSeqLen, setViewSeqLen] = useState(0);
+  const [seqInited, setSeqInited] = useState(false);
 
   const [syncScrollPercent, setSyncScrollPercent] = useState(0);
+  const [toolTips, setToolTips] = useState([]);
 
   // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
   const range = (start, stop, step = 1) =>
@@ -42,18 +48,19 @@ function App() {
       (_, i) => start + i * step,
     );
 
-  // update tool tips when display start or end coords changed
+  // update tool tips when display sequence changed
   useEffect(() => {
-    const t = range(displayStart, displayStart + scrollLen); setToolTips(t);
-    }, [displayStart, viewSeqLen]);
+    const t = range(boxStart.current, boxEnd.current);
+    setToolTips(t);
+  }, [boxSeq]);
 
+  // seqstr exclude last char
   const fetchSequence = async (start, end) => {
     const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`;
     try {
       const response = await fetch(url);
       const data = await response.json();
       const sequence = data[0]?.data || "";
-
       return sequence;
     } catch (error) {
       console.error("Failed to fetch sequence: ", error);
@@ -64,62 +71,69 @@ function App() {
   // load initial sequence
   useEffect(() => {
     const init = async () => {
-      // starting seq len 4k, needs to be larger than display len
-      const initHalfLen = 1000;
-      const start = coordinate - initHalfLen;
-      const end = coordinate + initHalfLen; // seqstr exclude last char
-      const disStart = coordinate - scrollHalfLen;
-      const disEnd = coordinate + scrollHalfLen;
-      // temp sequence
-      const seq = await fetchSequence(start, end);
-      setSequence(seq); setDisplaySequence(seq.slice(disStart - start, disEnd - start));
-      setSeqStart(start); setSeqEnd(end);
-      setDisplayStart(disStart); setDisplayEnd(disEnd);
+      const full_start = coordinate - initHalfLen;
+      const full_end = coordinate + initHalfLen;
+      const box_start = coordinate - boxSeqHalfLen;
+      const box_end = coordinate + boxSeqHalfLen;
+      const seq = await fetchSequence(full_start, full_end);
 
-      // load sequence and set scrolling widths params
+      // update coords
+      fullStart.current = full_start;
+      fullEnd.current = full_end;
+      boxStart.current = box_start;
+      boxEnd.current = box_end;
+      // update sequence
+      setFullSeq(seq);
+      setBoxSeq(seq.slice(box_start - full_start, box_end - full_start));
+
+      // set box widths (client and scroll width) after sequences were set
       setTimeout(() => {
         if (seqBoxRef.current) {
-          setScrollWidth(seqBoxRef.current.scrollWidth);
-          setClientWidth(seqBoxRef.current.clientWidth);
+          boxWdith.current = seqBoxRef.current.clientWidth;
+          boxSeqFullWidth.current = seqBoxRef.current.scrollWidth;
+          setSeqInited(true);
         }
       }, 10);
     }
     init();
   }, []);
 
-  // scroll to 50% at init
-  // shouldn't be triggered since we only set scrollWidth once
+  // manually scroll to 50% after sequences were inited
   useEffect(() => {
-    if (seqBoxRef.current) {
-      const halfway = (scrollWidth - clientWidth) / 2;
+    if (seqBoxRef.current && boxSeqFullWidth.current) {
+      const full_w = boxSeqFullWidth.current;
+      const view_w = boxWdith.current;
+      const halfway = (full_w - view_w) / 2;
       seqBoxRef.current.scrollLeft = halfway;
-      // set percent for 1k seq to sync to
       setSyncScrollPercent(0.5);
 
       // init viewing char number as well
-      const viewLen = scrollLen / scrollWidth * clientWidth;
-      setViewSeqLen(viewLen);
+      viewSeqLen.current = boxSeqLen / full_w * view_w;
+      console.log({
+        boxSeqFullWidth: boxSeqFullWidth.current,
+        halfway: halfway,
+      });
     }
-  }, [scrollWidth]);
+  }, [seqInited]);
+
 
   // update sequence box size dimensions
   const updateSeqBoxWidths = () => {
     if (seqBoxRef.current) {
       // scrollWidth is fixed once the first display seq is loaded
-      const newClientWidth = seqBoxRef.current.clientWidth;
-      setClientWidth(newClientWidth);
-      const viewLen = scrollLen / scrollWidth * newClientWidth;
-      console.log(scrollLen);
-      console.log(scrollWidth);
-      console.log(viewLen);
-      setViewSeqLen(viewLen);
+      boxWdith.current = seqBoxRef.current.clientWidth;
+      viewSeqLen.current = boxSeqLen / seqBoxRef.current.scrollWidth * seqBoxRef.current.clientWidth;
     }
   };
 
   // update scroll and client width upon resizing
   useEffect(() => {
     const observer = new ResizeObserver(() => { updateSeqBoxWidths(); });
-    if (seqBoxRef.current) { observer.observe(seqBoxRef.current); }
+
+    if (seqBoxRef.current) {
+      observer.observe(seqBoxRef.current);
+    }
+
     return () => {
       if (seqBoxRef.current) { observer.unobserve(seqBoxRef.current); }
     };
@@ -164,85 +178,104 @@ function App() {
   const handleScroll = async () => {
 
     const elem = seqBoxRef.current;
-    const leftEnd = scrollWidth - clientWidth;
+    const full_w = boxSeqFullWidth.current;
+    const box_w = boxWdith.current;
+    const leftEnd = full_w - box_w;
     const scrollPercent = elem.scrollLeft / leftEnd;
+    const startCoord = boxStart.current;
 
-    const center = Math.round(displayStart + (scrollLen - viewSeqLen) * scrollPercent + 0.5 * viewSeqLen);
-    setviewCenterCoord(center);
+    // coord of first char in view port
+    const viewStartCoord = Math.round(startCoord + (boxSeqLen - viewSeqLen.current) * scrollPercent);
+    setViewStart(viewStartCoord);
 
+    // setviewCenterCoord(center);
     // record scroll percent for 1k to sync to
     setSyncScrollPercent(scrollPercent);
 
     if (scrollPercent < 0.05 && !isReplacing) { // scroll past left edge
       setIsReplacing(true);
-      // shift display window to the left by scrollHalfLen
-      const newDisplayStart = displayStart - scrollHalfLen;
-      const newDisplayEnd = displayEnd - scrollHalfLen;
-      const newDisplaySequence = sequence.slice(newDisplayStart - seqStart, newDisplayEnd - seqStart);
-      setDisplaySequence(newDisplaySequence);
+      // shift display window to the left by boxSeqHalfLen
+      const newBoxStart = boxStart.current - boxSeqHalfLen;
+      const newBoxEnd = newBoxStart + boxSeqLen;
+      const newBoxSeq = fullSeq.slice(newBoxStart - fullStart.current, newBoxEnd - fullStart.current);
+      setBoxSeq(newBoxSeq);
 
       // update display Start and End after setting the sequence, or else it'll reset it with new start and end
       setTimeout(() => {
-        elem.scrollLeft += 0.5 * scrollWidth; // scroll 250 char (half of displaySeq len) to the right
+        elem.scrollLeft += 0.5 * full_w;
         setIsReplacing(false);
-        setDisplayStart(newDisplayStart); setDisplayEnd(newDisplayEnd);
+        boxStart.current = newBoxStart;
+        boxEnd.current = newBoxEnd;
         // update full seq by padding more to the left
-        if (newDisplayStart <= seqStart) {
-          updateFullSeqLeft(newDisplayStart);
+        if (newBoxStart - 500 <= fullStart.current) {
+          updateFullSeqLeft();
         }
       }, 10);
 
       console.log({
-        newDisplayStart,
-        newDisplayEnd,
-        sliceStart: newDisplayStart - seqStart,
-        sliceEnd: newDisplayStart - seqStart + scrollLen,
+        newBoxStart,
+        newBoxEnd,
+        sliceStart: newBoxStart - fullStart.current,
+        sliceEnd: newBoxEnd - fullStart.current,
         replacing: isReplacing,
       });
 
     } else if (scrollPercent > 0.95 && !isReplacing) { // scroll past right edge
       setIsReplacing(true);
-      // shift display window to the right by scrollHalfLen
-      const newDisplayStart = displayStart + scrollHalfLen;
-      const newDisplayEnd = displayEnd + scrollHalfLen;
-      const newDisplaySequence = sequence.slice(newDisplayStart - seqStart, newDisplayEnd - seqStart);
-      setDisplaySequence(newDisplaySequence);
+      // shift display window to the left by boxSeqHalfLen
+      const newBoxStart = boxStart.current + boxSeqHalfLen;
+      const newBoxEnd = newBoxStart + boxSeqLen;
+      const newBoxSeq = fullSeq.slice(newBoxStart - fullStart.current, newBoxEnd - fullStart.current);
+      setBoxSeq(newBoxSeq);
 
+      // update display Start and End after setting the sequence, or else it'll reset it with new start and end
       setTimeout(() => {
-        elem.scrollLeft -= 0.5 * scrollWidth; // scroll half of displaySeq len to the left
+        elem.scrollLeft -= 0.5 * full_w;
         setIsReplacing(false);
-        setDisplayStart(newDisplayStart); setDisplayEnd(newDisplayEnd);
-        if (newDisplayEnd >= seqEnd) { updateFullSeqRight(newDisplayEnd); } // pad on the right when run out paddings
+        boxStart.current = newBoxStart;
+        boxEnd.current = newBoxEnd;
+        // update full seq by padding more to the left
+        if (newBoxEnd + 500 >= fullEnd.current) {
+          updateFullSeqRight();
+        }
       }, 10);
 
       console.log({
-        newDisplayStart,
-        newDisplayEnd,
-        sliceStart: newDisplayStart - seqStart,
-        sliceEnd: newDisplayStart - seqStart + scrollLen,
+        newBoxStart,
+        newBoxEnd,
+        sliceStart: newBoxStart - fullStart.current,
+        sliceEnd: newBoxEnd - fullStart.current,
         replacing: isReplacing,
       });
 
     }
   };
 
-  const updateFullSeqLeft = async (newDisplayStart) => {
+  const updateFullSeqLeft = async () => {
     // Fetch additional sequence to pad on the left
     try {
-      const padLeftSeq = await fetchSequence(newDisplayStart - paddingLen, newDisplayStart);
-      setSequence((prevSequence) => padLeftSeq + prevSequence); // Prepend fetched sequence
-      setSeqStart((prevSeqStart) => prevSeqStart - paddingLen); // Adjust seqStart
+      const start = fullStart.current;
+
+      // retrive 1000 (padding len) left to the current starting coord
+      const padLeftSeq = await fetchSequence(start - paddingLen, start);
+
+      setFullSeq((prevSequence) => padLeftSeq + prevSequence); // Prepend fetched sequence
+      fullStart.current = start - paddingLen; // Adjust seqStart
     } catch (error) {
       console.error("Error fetching additional sequence:", error);
     }
   };
 
-  const updateFullSeqRight = async (newDisplayEnd) => {
-    // Fetch additional sequence to pad on the right
+  const updateFullSeqRight = async () => {
+    // Fetch additional sequence to pad on the left
     try {
-      const padRightSeq = await fetchSequence(newDisplayEnd, newDisplayEnd + paddingLen);
-      setSequence((prevSequence) => prevSequence + padRightSeq); // Append fetched sequence
-      setSeqEnd((prevSeqEnd) => prevSeqEnd + paddingLen); // Adjust seqStart
+      const end = fullEnd.current;
+
+      // retrive 1000 (padding len) right to the end starting coord
+      const padRightSeq = await fetchSequence(end, end + paddingLen);
+
+      setFullSeq((prevSequence) => prevSequence + padRightSeq); // Prepend fetched sequence
+      fullEnd.current = end + paddingLen; // Adjust full sequence end coord
     } catch (error) {
       console.error("Error fetching additional sequence:", error);
     }
@@ -250,11 +283,11 @@ function App() {
 
   // Add background color for beginning, middle and end of sequence for debug
   const getBackgroundColor = (index, seqLength) => {
-    if (index < scrollLen * 0.06) {
+    if (index < boxSeqLen * 0.06) {
       return "yellow"; // First 50 characters
     } else if (index === Math.floor(seqLength / 2)) {
       return "red"; // Middle character
-    } else if (index >= seqLength - scrollLen * 0.06) {
+    } else if (index >= seqLength - boxSeqLen * 0.06) {
       return "green"; // Last 50 characters
     }
     return "transparent"; // Default background
@@ -289,8 +322,10 @@ function App() {
         {/* Ruler */}
         <div className="relative pt-3 pb-3 ml-2 mr-2 bg-white border-b border-gray-800">
 
-          <div className="absolute pt-1 top-0 left-1/2 transform -translate-x-1/2 text-xs text-blue-600">
-            {viewCenterCoord}
+          <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
+            style={{ left: "0%", transform: "translateX(0%)" }}
+          >
+            {viewStart}
           </div>
           {/*           
           <div className="absolute pt-1 top-0 text-xs text-blue-600"
@@ -328,8 +363,8 @@ function App() {
           onScroll={handleScroll}
           style={{ whiteSpace: "nowrap" }}
         >
-          {displaySequence
-            ? displaySequence.split("").map((char, index) => (
+          {boxSeq
+            ? boxSeq.split("").map((char, index) => (
               // <Tippy content={toolTips[index]} key={index}>
               //   <span style={{ backgroundColor: getBackgroundColor(index, displaySequence.length) }} >
               //     {char}
@@ -340,7 +375,7 @@ function App() {
                 key={index}
                 className="inline-block"
                 title={toolTips[index]} // Native tooltip with coordinate
-                style={{ backgroundColor: getBackgroundColor(index, displaySequence.length) }}
+                style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }}
               >
                 {char}
               </span>
@@ -356,20 +391,20 @@ function App() {
         <h1>Debug:</h1>
         <ul className="space-y-2 text-sm">
           <li><span> --------SeqBox scrolling tracking---------</span></li>
-          <li><span> ScrollWidth:</span> {scrollWidth}</li>
-          <li><span> ClientWidth:</span> {clientWidth}</li>
-          <li><span> viewSeqLen:</span> {viewSeqLen}</li>
+          <li><span> box seq width:</span> {boxSeqFullWidth.current}</li>
+          <li><span> box view width:</span> {boxWdith.current}</li>
+          <li><span> viewSeqLen:</span> {viewSeqLen.current}</li>
           <li><span> scroll percent</span> {syncScrollPercent}</li>
-          <li><span> Full seq Start - End (zero based, exclude last) coordinate:</span> {seqStart} - {seqEnd}</li>
-          <li><span> display start end:</span> {displayStart} - {displayEnd}</li>
-
           <li>
-            <span> Full seq length:</span> {sequence.length};
-            <span> display seq length:</span> {displaySequence.length};
+            <span> Full seq Start - End (zero based, exclude last) coordinate:</span> 
+            {fullStart.current} - {fullEnd.current}
           </li>
-
-
-          <li><span> display center:</span> {viewCenterCoord}</li>
+          <li><span> Box seq start end:</span> {boxStart.current} - {boxEnd.current}</li>
+          <li>
+            <span> Full seq length:</span> {fullSeq.length};
+            <span> display seq length:</span> {boxSeq.length};
+          </li>
+          <li><span> view start coord:</span> {viewStart}</li>
 
           <li><span> --------Genome forms---------</span></li>
           <li><span> Genome:</span> {genome}</li>
@@ -382,11 +417,11 @@ function App() {
 
           <li><span> full seq:</span>
             {/* mini sequence box */}
-            <div className="block max-w-2xl px-2 border border-gray-200 rounded-md break-words text-gray-700 text-wrap font-mono mt-2">{sequence}</div>
+            <div className="block max-w-2xl px-2 border border-gray-200 rounded-md break-words text-gray-700 text-wrap font-mono mt-2">{fullSeq}</div>
           </li>
 
           <li><span> display seq:</span>
-            <div className="block max-w-2xl px-2 border border-gray-200 rounded-md break-words text-gray-700 text-wrap font-mono mt-2">{displaySequence}</div>
+            <div className="block max-w-2xl px-2 border border-gray-200 rounded-md break-words text-gray-700 text-wrap font-mono mt-2">{boxSeq}</div>
           </li>
         </ul>
       </div>
