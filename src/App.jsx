@@ -13,7 +13,7 @@ function App() {
   const [sequence, setSequence] = useState("");
   // scrollable content sequence len: 1000 characters
   const scrollHalfLen = 500;
-  const scrollLen = 2 * scrollHalfLen; // retrieve center -/+ 500, 1001 sequencec in total
+  const scrollLen = 1000; // retrieve center -/+ 500, 1001 sequencec in total
   // pad 1000 char at a time
   const paddingLen = 1000;
   const [seqStart, setSeqStart] = useState(null);
@@ -116,16 +116,16 @@ function App() {
       const oneKEnd = displayEnd + oneKPadLen;
       setOneKFullSeq(sequence.slice(oneKStart - seqStart, oneKEnd - seqEnd));
 
-    // Delay scroll to oneKBox to ensure fullSeq update is complete
-    setTimeout(() => {
-      if (oneKBoxRef.current) {
-        const oneKBox = oneKBoxRef.current;
+      // Delay scroll to oneKBox to ensure fullSeq update is complete
+      setTimeout(() => {
+        if (oneKBoxRef.current) {
+          const oneKBox = oneKBoxRef.current;
 
-        // Calculate and set the middle scroll position
-        const oneKScrollWidth = oneKBox.scrollWidth - oneKBox.clientWidth;
-        oneKBox.scrollLeft = oneKScrollWidth * 0.5;
-      }
-    }, 10); // Adjust timeout if necessary
+          // Calculate and set the middle scroll position
+          const oneKScrollWidth = oneKBox.scrollWidth - oneKBox.clientWidth;
+          oneKBox.scrollLeft = oneKScrollWidth * 0.5;
+        }
+      }, 10); 
     }
   }, [scrollWidth]);
 
@@ -133,10 +133,14 @@ function App() {
   const updateSeqBoxWidths = () => {
     if (seqBoxRef.current) {
       // scrollWidth is fixed once the first display seq is loaded
-      setClientWidth(seqBoxRef.current.clientWidth);
-      const viewLen = scrollLen / scrollWidth * seqBoxRef.current.clientWidth;
+      const newClientWidth = seqBoxRef.current.clientWidth;
+      setClientWidth(newClientWidth);
+      const viewLen = scrollLen / scrollWidth * newClientWidth;
+      console.log(scrollLen);
+      console.log(scrollWidth);
+      console.log(viewLen);
       setViewSeqLen(viewLen);
-      setOneKSeqWidth(seqBoxRef.current.clientWidth / 1000);
+      setOneKSeqWidth(newClientWidth / 1000);
     }
   };
 
@@ -214,6 +218,9 @@ function App() {
       const newDisplayEnd = displayEnd - scrollHalfLen;
       const newDisplaySequence = sequence.slice(newDisplayStart - seqStart, newDisplayEnd - seqStart);
       setDisplaySequence(newDisplaySequence);
+
+      const oneKPadLen = 500 - Math.round(viewSeqLen / 2);
+      const newOneKStart = 0;
       // update display Start and End after setting the sequence, or else it'll reset it with new start and end
       setTimeout(() => {
         elem.scrollLeft += 0.5 * scrollWidth; // scroll 250 char (half of displaySeq len) to the right
@@ -375,11 +382,20 @@ function App() {
         >
           {displaySequence
             ? displaySequence.split("").map((char, index) => (
-              <Tippy content={toolTips[index]} key={index}>
-                <span style={{ backgroundColor: getBackgroundColor(index, displaySequence.length) }} >
-                  {char}
-                </span>
-              </Tippy>
+              // <Tippy content={toolTips[index]} key={index}>
+              //   <span style={{ backgroundColor: getBackgroundColor(index, displaySequence.length) }} >
+              //     {char}
+              //   </span>
+              // </Tippy>
+              // vanila tooltips
+              <span
+                key={index}
+                className="inline-block"
+                title={toolTips[index]} // Native tooltip with coordinate
+                style={{ backgroundColor: getBackgroundColor(index, displaySequence.length) }}
+              >
+                {char}
+              </span>
             ))
             : "Loading...."}
           {/* Center line for debug */}
