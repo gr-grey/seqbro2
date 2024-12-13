@@ -9,9 +9,9 @@ import GenomeForm from './GenomeForm';
 function App() {
   // get sequence
   const [genome, setGenome] = useState("hg38");
-  const [chromosome, setChromosome] = useState("chr1");
+  const [chromosome, setChromosome] = useState("chr7");
   const [coordinate, setCoordinate] = useState(5530600);
-  const [strand, setStrand] = useState('+');
+  const [strand, setStrand] = useState('-');
   const [gene, setGene] = useState('ACTB');
 
   // scrollable content sequence len: 1000 characters
@@ -21,7 +21,7 @@ function App() {
   const paddingLen = 1000;
   // starting seq len 3k, display middle 1k in box
   // left and right each has 1k padding
-  const initHalfLen = 1000;
+  const initHalfLen = 1500;
 
   const fullStart = useRef(null); const fullEnd = useRef(null);
   const boxStart = useRef(null); const boxEnd = useRef(null);
@@ -51,6 +51,33 @@ function App() {
       { length: Math.ceil((stop - start) / step) },
       (_, i) => start + i * step,
     );
+
+  // set tool tips according to strand
+  const getToolTips = (start, end, strand) => {
+    if (strand === '-') {
+      return range(end, start, -1); // Reverse range for '-' strand
+    } else {
+      return range(start, end); // Normal range for '+' strand
+    }
+  };
+
+  // calculate coord at the left of the ruler, count for strand
+  const getViewStartCoord = (start, scrollChar, clientChar, scrollPercent) => {
+    if (strand === '-') {
+      return Math.round(start + scrollChar - (scrollChar - clientChar) * scrollPercent);
+    } else {
+      return Math.round(start + (scrollChar - clientChar) * scrollPercent);
+    }
+  };
+
+  // get ruler maker/ tick coordinates, count for strand
+  const getRulerTickCoord = (percent) => {
+    if (strand === '-') {
+      return Math.round(viewStart - percent * viewSeqLen.current);
+    } else {
+      return Math.round(viewStart + percent * viewSeqLen.current);
+    }
+  };
 
   // seqstr exclude last char
   const fetchSequence = async (start, end) => {
@@ -92,7 +119,7 @@ function App() {
           boxSeqFullWidth.current = seqBoxRef.current.scrollWidth;
           setSeqInited(true);
           // init tooltips
-          setToolTips(range(box_start, box_end));
+          setToolTips(getToolTips(box_start, box_end, strand));
         }
       }, 10);
     }
@@ -109,12 +136,10 @@ function App() {
       setSyncScrollPercent(0.5);
 
       // init viewing char number
-      const viewLen= boxSeqLen / full_w * view_w;
-      // init view start coord
-      const viewStartCoord = Math.round(boxStart.current + (boxSeqLen - viewLen) * 0.5);
-
+      const viewLen = boxSeqLen / full_w * view_w;
       viewSeqLen.current = viewLen;
-      setViewStart(viewStartCoord);
+      // init view start coord
+      setViewStart(getViewStartCoord(boxStart.current, boxSeqLen, viewLen, 0.5));
     }
   }, [seqInited]);
 
@@ -129,12 +154,12 @@ function App() {
 
       const viewLen = boxSeqLen / full_w * box_w;
       // coord of first char in view port
-      const viewStartCoord = Math.round(boxStart.current + (boxSeqLen - viewLen) * scrollPercent);
-      
+      // this usually doesn't change but just in case
+      setViewStart(getViewStartCoord(boxStart.current, boxSeqLen, viewLen, scrollPercent));
+
       // update varaibles
       boxWidth.current = box_w;
       viewSeqLen.current = viewLen;
-      setViewStart(viewStartCoord);
       setSyncScrollPercent(scrollPercent);
     }
   };
@@ -187,6 +212,44 @@ function App() {
     }
   };
 
+  // swap viewing sequence in display box, counting strand
+  const getSwapSeqCoords = (edge) => {
+    // swapping when scrolling to the left edge
+    if (edge === 'left') {
+      if (strand === '-') {
+        const newBoxStart = boxStart.current + boxSeqHalfLen;
+        const newBoxEnd = newBoxStart + boxSeqLen;
+        const sliceStart = fullEnd.current - newBoxStart;
+        const sliceEnd = sliceStart + boxSeqLen;
+        const updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
+        return {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq};
+      } else {
+        const newBoxStart = boxStart.current - boxSeqHalfLen;
+        const newBoxEnd = newBoxStart + boxSeqLen;
+        const sliceStart = newBoxStart - fullStart.current;
+        const sliceEnd = sliceStart + boxSeqLen;
+        const updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
+        return {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq};
+      }
+    } else if (edge === 'right') { // swapping when scroll to right edge
+      if (strand === '-') {
+        const newBoxStart = boxStart.current - boxSeqHalfLen;
+        const newBoxEnd = newBoxStart + boxSeqLen;
+        const sliceStart = fullEnd.current - newBoxEnd;
+        const sliceEnd = sliceStart + boxSeqLen;
+        const updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
+        return {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq};        
+      } else {
+        const newBoxStart = boxStart.current + boxSeqHalfLen;
+        const newBoxEnd = newBoxStart + boxSeqLen;
+        const sliceStart = newBoxStart - fullStart.current;
+        const sliceEnd = sliceStart + boxSeqLen;
+        const updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
+        return {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq};
+      }
+    }
+  };
+
   const handleScroll = async () => {
 
     const elem = seqBoxRef.current;
@@ -197,20 +260,16 @@ function App() {
     const startCoord = boxStart.current;
 
     // coord of first char in view port
-    const viewStartCoord = Math.round(startCoord + (boxSeqLen - viewSeqLen.current) * scrollPercent);
-    setViewStart(viewStartCoord);
+    setViewStart(getViewStartCoord(startCoord, boxSeqLen, viewSeqLen.current, scrollPercent));
 
-    // setviewCenterCoord(center);
     // record scroll percent for 1k to sync to
     setSyncScrollPercent(scrollPercent);
 
     if (scrollPercent < 0.05 && !isReplacing) { // scroll past left edge
       setIsReplacing(true);
       // shift display window to the left by boxSeqHalfLen
-      const newBoxStart = boxStart.current - boxSeqHalfLen;
-      const newBoxEnd = newBoxStart + boxSeqLen;
-      const newBoxSeq = fullSeq.slice(newBoxStart - fullStart.current, newBoxEnd - fullStart.current);
-      setBoxSeq(newBoxSeq);
+      const {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq} = getSwapSeqCoords('left');
+      setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
 
       // update display Start and End after setting the sequence, or else it'll reset it with new start and end
       setTimeout(() => {
@@ -219,28 +278,15 @@ function App() {
         boxStart.current = newBoxStart;
         boxEnd.current = newBoxEnd;
         // update full seq by padding more to the left
-        if (newBoxStart - 500 <= fullStart.current) {
-          updateFullSeqLeft();
-        }
+        if (updateSeq) { updateFullSeqLeft(); }
         // update tooltips
-        setToolTips(range(newBoxStart, newBoxEnd));
+        setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
       }, 10);
-
-      // console.log({
-      //   newBoxStart,
-      //   newBoxEnd,
-      //   sliceStart: newBoxStart - fullStart.current,
-      //   sliceEnd: newBoxEnd - fullStart.current,
-      //   replacing: isReplacing,
-      // });
 
     } else if (scrollPercent > 0.95 && !isReplacing) { // scroll past right edge
       setIsReplacing(true);
-      // shift display window to the left by boxSeqHalfLen
-      const newBoxStart = boxStart.current + boxSeqHalfLen;
-      const newBoxEnd = newBoxStart + boxSeqLen;
-      const newBoxSeq = fullSeq.slice(newBoxStart - fullStart.current, newBoxEnd - fullStart.current);
-      setBoxSeq(newBoxSeq);
+      const {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq} = getSwapSeqCoords('right');
+      setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
 
       // update display Start and End after setting the sequence, or else it'll reset it with new start and end
       setTimeout(() => {
@@ -249,11 +295,9 @@ function App() {
         boxStart.current = newBoxStart;
         boxEnd.current = newBoxEnd;
         // update full seq by padding more to the left
-        if (newBoxEnd + 500 >= fullEnd.current) {
-          updateFullSeqRight();
-        }
+        if (updateSeq) { updateFullSeqRight(); }
         // update tooltips
-        setToolTips(range(newBoxStart, newBoxEnd));
+        setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
       }, 10);
 
     }
@@ -262,11 +306,19 @@ function App() {
   const updateFullSeqLeft = async () => {
     // Fetch additional sequence to pad on the left
     try {
-      const start = fullStart.current;
-      // retrive 1000 (padding len) left to the current starting coord
-      const padLeftSeq = await fetchSequence(start - paddingLen, start);
-      setFullSeq((prevSequence) => padLeftSeq + prevSequence); // Prepend fetched sequence
-      fullStart.current = start - paddingLen; // Adjust seqStart
+      if (strand === '-') {
+        // for minus strand, retrive at the end but prepend it 
+        const end = fullEnd.current;
+        const padLeftSeq = await fetchSequence(end, end + paddingLen);
+        setFullSeq((prevSequence) => padLeftSeq + prevSequence);
+        fullEnd.current = end + paddingLen;
+      } else {
+        const start = fullStart.current;
+        // retrive 1000 (padding len) left to the current starting coord
+        const padLeftSeq = await fetchSequence(start - paddingLen, start);
+        setFullSeq((prevSequence) => padLeftSeq + prevSequence); // Prepend fetched sequence
+        fullStart.current = start - paddingLen; // Adjust seqStart
+      }
     } catch (error) {
       console.error("Error fetching additional sequence:", error);
     }
@@ -275,13 +327,19 @@ function App() {
   const updateFullSeqRight = async () => {
     // Fetch additional sequence to pad on the left
     try {
-      const end = fullEnd.current;
-
-      // retrive 1000 (padding len) right to the end starting coord
-      const padRightSeq = await fetchSequence(end, end + paddingLen);
-
-      setFullSeq((prevSequence) => prevSequence + padRightSeq); // Prepend fetched sequence
-      fullEnd.current = end + paddingLen; // Adjust full sequence end coord
+      if (strand === '-') {
+        // minus strand, same as update right in plus, but append instead of prepend
+        const start = fullStart.current;
+        const padRightSeq = await fetchSequence(start - paddingLen, start);
+        setFullSeq((prevSequence) => prevSequence + padRightSeq); // Prepend fetched sequence
+        fullStart.current = start - paddingLen; // Adjust seqStart
+      } else {
+        const end = fullEnd.current;
+        // retrive 1000 (padding len) right to the end starting coord
+        const padRightSeq = await fetchSequence(end, end + paddingLen);
+        setFullSeq((prevSequence) => prevSequence + padRightSeq); // Append fetched sequence
+        fullEnd.current = end + paddingLen; // Adjust full sequence end coord
+      }
     } catch (error) {
       console.error("Error fetching additional sequence:", error);
     }
@@ -350,13 +408,13 @@ function App() {
               <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
                 style={{ left: "50%" }}
               >
-                {Math.round(viewStart + viewSeqLen.current / 2)}
+                {getRulerTickCoord(0.5)}
               </div>
 
               <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
                 style={{ left: "100%", transform: "translateX(-100%)" }}
               >
-                {Math.round(viewStart + viewSeqLen.current)}
+                {getRulerTickCoord(1.0)}
               </div>
 
               {ticks.map((pos, index) => (
@@ -374,20 +432,20 @@ function App() {
             >
               {boxSeq
                 ? boxSeq.split("").map((char, index) => (
-                  // <Tippy content={toolTips[index]} key={index}>
-                  //   <span style={{ backgroundColor: getBackgroundColor(index, displaySequence.length) }} >
-                  //     {char}
-                  //   </span>
-                  // </Tippy>
+                  <Tippy content={toolTips[index]} key={index}>
+                    <span style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }} >
+                      {char}
+                    </span>
+                  </Tippy>
                   // vanila tooltips
-                  <span
-                    key={index}
-                    className="inline-block"
-                    title={toolTips[index]} // Native tooltip with coordinate
-                    style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }}
-                  >
-                    {char}
-                  </span>
+                  // <span
+                  //   key={index}
+                  //   className="inline-block"
+                  //   title={toolTips[index]} // Native tooltip with coordinate
+                  //   style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }}
+                  // >
+                  //   {char}
+                  // </span>
                 ))
                 : "Loading...."}
               {/* Center line for debug */}
