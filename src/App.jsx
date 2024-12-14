@@ -5,6 +5,7 @@ import 'tippy.js/dist/tippy.css';
 import DebugPanel from './DebugPanel';
 import NavBar from './NavBar';
 import GenomeForm from './GenomeForm';
+import DallianceViewer from './DallianceViewer';
 
 function App() {
   // get sequence
@@ -155,12 +156,15 @@ function App() {
       const viewLen = boxSeqLen / full_w * box_w;
       // coord of first char in view port
       // this usually doesn't change but just in case
-      setViewStart(getViewStartCoord(boxStart.current, boxSeqLen, viewLen, scrollPercent));
+      const newViewStart = getViewStartCoord(boxStart.current, boxSeqLen, viewLen, scrollPercent);
+      setViewStart(newViewStart);
 
       // update varaibles
       boxWidth.current = box_w;
       viewSeqLen.current = viewLen;
       setSyncScrollPercent(scrollPercent);
+
+      updateDallianceCoord(browserRef,newViewStart, viewLen);
     }
   };
 
@@ -222,14 +226,14 @@ function App() {
         const sliceStart = fullEnd.current - newBoxStart;
         const sliceEnd = sliceStart + boxSeqLen;
         const updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
-        return {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq};
+        return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
       } else {
         const newBoxStart = boxStart.current - boxSeqHalfLen;
         const newBoxEnd = newBoxStart + boxSeqLen;
         const sliceStart = newBoxStart - fullStart.current;
         const sliceEnd = sliceStart + boxSeqLen;
         const updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
-        return {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq};
+        return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
       }
     } else if (edge === 'right') { // swapping when scroll to right edge
       if (strand === '-') {
@@ -238,14 +242,14 @@ function App() {
         const sliceStart = fullEnd.current - newBoxEnd;
         const sliceEnd = sliceStart + boxSeqLen;
         const updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
-        return {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq};        
+        return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
       } else {
         const newBoxStart = boxStart.current + boxSeqHalfLen;
         const newBoxEnd = newBoxStart + boxSeqLen;
         const sliceStart = newBoxStart - fullStart.current;
         const sliceEnd = sliceStart + boxSeqLen;
         const updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
-        return {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq};
+        return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
       }
     }
   };
@@ -257,10 +261,11 @@ function App() {
     const box_w = boxWidth.current;
     const leftEnd = full_w - box_w;
     const scrollPercent = elem.scrollLeft / leftEnd;
-    const startCoord = boxStart.current;
+    // const startCoord = boxStart.current;
 
+    const newViewStart = getViewStartCoord(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent);
     // coord of first char in view port
-    setViewStart(getViewStartCoord(startCoord, boxSeqLen, viewSeqLen.current, scrollPercent));
+    setViewStart(newViewStart);
 
     // record scroll percent for 1k to sync to
     setSyncScrollPercent(scrollPercent);
@@ -268,7 +273,7 @@ function App() {
     if (scrollPercent < 0.05 && !isReplacing) { // scroll past left edge
       setIsReplacing(true);
       // shift display window to the left by boxSeqHalfLen
-      const {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq} = getSwapSeqCoords('left');
+      const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords('left');
       setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
 
       // update display Start and End after setting the sequence, or else it'll reset it with new start and end
@@ -285,7 +290,7 @@ function App() {
 
     } else if (scrollPercent > 0.95 && !isReplacing) { // scroll past right edge
       setIsReplacing(true);
-      const {newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq} = getSwapSeqCoords('right');
+      const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords('right');
       setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
 
       // update display Start and End after setting the sequence, or else it'll reset it with new start and end
@@ -364,12 +369,30 @@ function App() {
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
+  // Dalliance genome viewer
+  const viewerRef = useRef(null);
+  const browserRef  = useRef(null);
+
+  const updateDallianceCoord = (browserRef, viewStart, viewLen) => {
+    if (strand === '+') {
+      browserRef.current.setLocation(chromosome, viewStart, Math.round(viewStart+viewLen));
+    } else { // minus strand
+      browserRef.current.setLocation(chromosome, Math.round(viewStart-viewLen), viewStart);
+    }
+  };
+  // sync dalliance genome browser as seq view box start coord changes
+  useEffect(() => {
+    if (browserRef.current && viewStart) {
+      updateDallianceCoord(browserRef, viewStart, viewSeqLen.current);
+    }
+  }, [viewStart]);
+
   return (
     <>
       <NavBar />
       <div className="flex h-screen">
         {/* Left side of screen 1/4 or max-80 */}
-        <div className="w-1/4 max-w-[20rem] border-r border-gray-300 p-4">
+        <div className="w-1/4 max-w-[15rem] border-r border-gray-300 p-4">
           <GenomeForm {...genomeFormVars} />
         </div>
 
@@ -451,8 +474,14 @@ function App() {
               {/* Center line for debug */}
               <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
             </div>
-
           </div>
+
+          <DallianceViewer
+            viewerRef={viewerRef}
+            browserRef={browserRef}
+            chromosome={chromosome}
+          />
+
           <DebugPanel {...debugVars} />
         </div>
       </div>
