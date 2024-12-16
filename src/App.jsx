@@ -6,6 +6,11 @@ import DebugPanel from './DebugPanel';
 import NavBar from './NavBar';
 import GenomeForm from './GenomeForm';
 import DallianceViewer from './DallianceViewer';
+import Plot from 'react-plotly.js';
+
+// todo:
+// - change full seq to ref and not state - since it does not involve in state variables
+
 
 function App() {
   // get sequence
@@ -28,6 +33,8 @@ function App() {
   const boxStart = useRef(null); const boxEnd = useRef(null);
   const [fullSeq, setFullSeq] = useState("");
   const [boxSeq, setBoxSeq] = useState("");
+
+  const plotFullSeq = useRef(null);
 
   const seqBoxRef = useRef(null);
   // width of the full seq in seqbox, like 9000px
@@ -112,6 +119,8 @@ function App() {
       // update sequence
       setFullSeq(seq);
       setBoxSeq(seq.slice(box_start - full_start, box_end - full_start));
+      // test: plot with full seq
+      plotFullSeq.current = seq;
 
       // set box widths (client and scroll width) after sequences were set
       setTimeout(() => {
@@ -164,7 +173,7 @@ function App() {
       viewSeqLen.current = viewLen;
       setSyncScrollPercent(scrollPercent);
 
-      updateDallianceCoord(browserRef,newViewStart, viewLen);
+      updateDallianceCoord(browserRef, newViewStart, viewLen);
     }
   };
 
@@ -362,22 +371,161 @@ function App() {
     return "transparent"; // Default background
   };
 
+  // onnx session to run puffin inference
+  const [plotData, setPlotData] = useState(null);
+  const [plotLayout, setPlotLayout] = useState(null);
+
+  const runInferenceAndPlot = async () => {
+    try {
+      const session = await window.ort.InferenceSession.create(`/testnet0.onnx`);
+
+      const seqEncoded = Array.from(plotFullSeq.current).map((char) => {
+        switch (char) {
+          case 'A': return [1, 0, 0, 0];
+          case 'C': return [0, 1, 0, 0];
+          case 'G': return [0, 0, 1, 0];
+          case 'T': return [0, 0, 0, 1];
+          default: return [0, 0, 0, 0];
+        }
+      });
+
+      // Transpose the matrix
+      const seqTransposed = seqEncoded[0].map((_, colIndex) =>
+        seqEncoded.map(row => row[colIndex])
+      );
+      const seqEncodedTensor = new ort.Tensor('float32', seqTransposed.flat(), [1, 4, plotFullSeq.current.length])
+      console.log(seqEncoded);
+
+      // Run inference
+      const feeds = { [session.inputNames[0]]: seqEncodedTensor };
+      const results = await session.run(feeds);
+
+      console.log(results['motif1'].data);
+
+      // Extract outputs
+      const motifs = Array.from({ length: 18 }, (_, i) =>
+        results[`motif${i + 1}`].data
+      );
+      const motifacts = Array.from({ length: 18 }, (_, i) =>
+        results[`motifact${i + 1}`].data
+      );
+      const effects_motif = results["effects_motif"].data;
+      const effects_total = results["effects_total"].data;
+      const effects_inr = results["effects_inr"].data;
+      const effects_sim = results["effects_sim"].data;
+
+      const y_pred = results["y_pred"].data;
+
+      // Plot data
+      const tssList = ['YY1+', 'TATA+', 'U1 snRNP+', 'YY1-', 'ETS+', 'NFY+', 'ETS-', 'NFY-',
+        'CREB+', 'CREB-', 'ZNF143+', 'SP+', 'SP-', 'NRF1-', 'NRF1+',
+        'ZNF143-', 'TATA-', 'U1 snRNP-'];
+
+      const colorArr = ['#1F77B4', '#E41A1C', '#9F9F9F', '#c2d5e8', '#19d3f3', '#00CC96',
+        '#19e4f3', '#00cc5f', '#FF6692', '#ff66c2', '#17a4cf', '#FF7F0E',
+        '#ff930e', '#b663fa', '#AB63FA', '#17BECF', '#ffc6ba', '#CFCFCF'];
+
+      const traces = [];
+
+      // Add Motif Activations to Traces
+      motifacts.forEach((data, index) => {
+        traces.push({
+          y: data,
+          mode: 'lines',
+          name: tssList[index],
+          line: { color: colorArr[index], width: 1 },
+          legendgroup: index.toString(),
+          xaxis: 'x1',
+          yaxis: 'y1',
+        });
+      });
+
+      // Add Motif Effect to Traces
+      motifs.forEach((data, index) => {
+        traces.push({
+          y: data,
+          mode: 'lines',
+          name: tssList[index],
+          line: { color: colorArr[index], width: 1 },
+          legendgroup: index.toString(),
+          xaxis: 'x2',
+          yaxis: 'y2',
+        });
+      });
+
+      // Add Effects to Traces
+      traces.push({
+        y: effects_motif,
+        mode: 'lines',
+        name: 'motif_effects',
+        line: { color: '#445B88', width: 1 },
+        xaxis: 'x3',
+        yaxis: 'y3',
+      });
+      traces.push({
+        y: effects_inr,
+        mode: 'lines',
+        name: 'inr_effects',
+        line: { color: '#445B88', width: 1 },
+        xaxis: 'x3',
+        yaxis: 'y3',
+      });
+      traces.push({
+        y: effects_sim,
+        mode: 'lines',
+        name: 'sim_effects',
+        line: { color: '#445B88', width: 1 },
+        xaxis: 'x3',
+        yaxis: 'y3',
+      });
+
+      traces.push({
+        y: y_pred,
+        mode: 'lines',
+        name: 'y_pred',
+        line: { color: '#143066', width: 1 },
+        xaxis: 'x4',
+        yaxis: 'y4',
+      });
+
+      // Set Plot Data and Layout
+      setPlotData(traces);
+      setPlotLayout({
+        title: 'Puffin Model Plot',
+        height: 800,
+        width: 1400,
+        template: 'plotly_white',
+        grid: { rows: 4, columns: 1, pattern: 'independent' },
+      });
+
+    } catch (error) {
+      console.error('Error running inference and plotting:', error);
+    }
+  };
+
+  // for now only run once at init
+  useEffect(() => {
+    if (plotFullSeq.current) {
+      runInferenceAndPlot();
+    }
+  }, [seqInited]);
+
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq, };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
   // Dalliance genome viewer
   const viewerRef = useRef(null);
-  const browserRef  = useRef(null);
+  const browserRef = useRef(null);
 
   const updateDallianceCoord = (browserRef, viewStart, viewLen) => {
     if (strand === '+') {
-      browserRef.current.setLocation(chromosome, viewStart, Math.round(viewStart+viewLen));
+      browserRef.current.setLocation(chromosome, viewStart, Math.round(viewStart + viewLen));
     } else { // minus strand
-      browserRef.current.setLocation(chromosome, Math.round(viewStart-viewLen), viewStart);
+      browserRef.current.setLocation(chromosome, Math.round(viewStart - viewLen), viewStart);
     }
   };
   // sync dalliance genome browser as seq view box start coord changes
@@ -481,6 +629,19 @@ function App() {
             browserRef={browserRef}
             chromosome={chromosome}
           />
+
+          {/* plotly puffin */}
+          <div>
+            {plotData && plotLayout ? (
+              <Plot
+                data={plotData}
+                layout={plotLayout}
+                config={{ responsive: true }}
+              />
+            ) : (
+              <p>Loading plot...</p>
+            )}
+          </div>
 
           <DebugPanel {...debugVars} />
         </div>
