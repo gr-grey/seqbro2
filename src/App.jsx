@@ -17,7 +17,7 @@ function App() {
   const [genome, setGenome] = useState("hg38");
   const [chromosome, setChromosome] = useState("chr7");
   const [coordinate, setCoordinate] = useState(5530600);
-  const [strand, setStrand] = useState('-');
+  const [strand, setStrand] = useState('+');
   const [gene, setGene] = useState('ACTB');
 
   // scrollable content sequence len: 1000 characters
@@ -34,7 +34,10 @@ function App() {
   const [fullSeq, setFullSeq] = useState("");
   const [boxSeq, setBoxSeq] = useState("");
 
+  // inference
   const plotFullSeq = useRef(null);
+  // puffin inference lose 325 from start and end
+  const puffin_offset = 325;
 
   const seqBoxRef = useRef(null);
   // width of the full seq in seqbox, like 9000px
@@ -119,8 +122,10 @@ function App() {
       // update sequence
       setFullSeq(seq);
       setBoxSeq(seq.slice(box_start - full_start, box_end - full_start));
-      // test: plot with full seq
-      plotFullSeq.current = seq;
+      // test: plot seq halflen = 500 + 325, plus strand only
+      const plotStart = coordinate - boxSeqHalfLen - puffin_offset;
+      const plotEnd = coordinate + boxSeqHalfLen + puffin_offset;
+      plotFullSeq.current = seq.slice(plotStart - full_start, plotEnd - full_start);
 
       // set box widths (client and scroll width) after sequences were set
       setTimeout(() => {
@@ -263,59 +268,171 @@ function App() {
     }
   };
 
-  const handleScroll = async () => {
+  // modularize handle scroll, separate infinite scrolling, trigger swapping
+  // and syncing between seqBoxRef and plotRef
 
-    const elem = seqBoxRef.current;
+  // Function to sync scroll positions between refs
+  // const syncScroll = (sourceElem, targetElem) => {
+  //   const scrollPercent =
+  //     sourceElem.scrollLeft / (sourceElem.scrollWidth - sourceElem.clientWidth);
+
+  //   if (targetElem) {
+  //     const targetScrollWidth = targetElem.scrollWidth - targetElem.clientWidth;
+  //     targetElem.scrollLeft = scrollPercent * targetScrollWidth;
+  //   }
+  // };
+
+  // Ref to prevent circular scroll updates
+  const isSyncingScroll = useRef(false);
+  const syncScroll = (sourceElem, targetElem) => {
+    if (!sourceElem || !targetElem) return;
+
+    // Prevent triggering a sync if already in progress
+    if (isSyncingScroll.current) return;
+
+    // Calculate scroll percentage
+    const scrollPercent =
+      sourceElem.scrollLeft / (sourceElem.scrollWidth - sourceElem.clientWidth);
+    setSyncScrollPercent(scrollPercent);
+
+    const targetScrollWidth = targetElem.scrollWidth - targetElem.clientWidth;
+    const newScrollLeft = scrollPercent * targetScrollWidth;
+
+    // Set the flag and update the target scroll position
+    isSyncingScroll.current = true;
+    targetElem.scrollLeft = newScrollLeft;
+
+    // Reset the flag after the browser processes the scroll
+    requestAnimationFrame(() => {
+      isSyncingScroll.current = false;
+    });
+  };
+
+  // Function to handle infinite scrolling logic
+  const handleInfiniteScroll = (elem) => {
     const full_w = boxSeqFullWidth.current;
     const box_w = boxWidth.current;
     const leftEnd = full_w - box_w;
     const scrollPercent = elem.scrollLeft / leftEnd;
-    // const startCoord = boxStart.current;
 
-    const newViewStart = getViewStartCoord(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent);
-    // coord of first char in view port
+    const newViewStart = getViewStartCoord(
+      boxStart.current,
+      boxSeqLen,
+      viewSeqLen.current,
+      scrollPercent
+    );
     setViewStart(newViewStart);
 
-    // record scroll percent for 1k to sync to
-    setSyncScrollPercent(scrollPercent);
-
-    if (scrollPercent < 0.05 && !isReplacing) { // scroll past left edge
-      setIsReplacing(true);
-      // shift display window to the left by boxSeqHalfLen
-      const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords('left');
-      setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
-
-      // update display Start and End after setting the sequence, or else it'll reset it with new start and end
-      setTimeout(() => {
-        elem.scrollLeft += 0.5 * full_w;
-        setIsReplacing(false);
-        boxStart.current = newBoxStart;
-        boxEnd.current = newBoxEnd;
-        // update full seq by padding more to the left
-        if (updateSeq) { updateFullSeqLeft(); }
-        // update tooltips
-        setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
-      }, 10);
-
-    } else if (scrollPercent > 0.95 && !isReplacing) { // scroll past right edge
-      setIsReplacing(true);
-      const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords('right');
-      setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
-
-      // update display Start and End after setting the sequence, or else it'll reset it with new start and end
-      setTimeout(() => {
-        elem.scrollLeft -= 0.5 * full_w;
-        setIsReplacing(false);
-        boxStart.current = newBoxStart;
-        boxEnd.current = newBoxEnd;
-        // update full seq by padding more to the left
-        if (updateSeq) { updateFullSeqRight(); }
-        // update tooltips
-        setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
-      }, 10);
-
+    if (scrollPercent < 0.05 && !isReplacing) {
+      triggerInfiniteScroll("left", elem, full_w);
+    } else if (scrollPercent > 0.95 && !isReplacing) {
+      triggerInfiniteScroll("right", elem, full_w);
     }
   };
+
+  // Helper to handle sequence swapping
+  const triggerInfiniteScroll = (direction, elem, full_w) => {
+    setIsReplacing(true);
+    const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } =
+      getSwapSeqCoords(direction);
+    setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
+
+    setTimeout(() => {
+      if (direction === "left") elem.scrollLeft += 0.5 * full_w;
+      else elem.scrollLeft -= 0.5 * full_w;
+
+      setIsReplacing(false);
+      boxStart.current = newBoxStart;
+      boxEnd.current = newBoxEnd;
+
+      if (updateSeq) {
+        direction === "left" ? updateFullSeqLeft() : updateFullSeqRight();
+      }
+
+      setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
+    }, 10);
+  };
+
+  // Sequence box scroll handler
+  const handleSeqBoxScroll = () => {
+    const seqElem = seqBoxRef.current;
+    const plotElem = plotRef.current;
+
+    if (seqElem) {
+      // Handle infinite scrolling for the sequence box
+      handleInfiniteScroll(seqElem);
+
+      // Sync plot scrolling
+      syncScroll(seqElem, plotElem);
+    }
+  };
+
+  // Plot scroll handler
+  const handlePlotScroll = () => {
+    const seqElem = seqBoxRef.current;
+    const plotElem = plotRef.current;
+
+    if (plotElem) {
+      // Sync sequence box scrolling
+      syncScroll(plotElem, seqElem);
+
+      // Future: Add infinite scroll logic 
+    }
+  };
+
+  // const handleScroll = async () => {
+
+  //   const elem = seqBoxRef.current;
+  //   const full_w = boxSeqFullWidth.current;
+  //   const box_w = boxWidth.current;
+  //   const leftEnd = full_w - box_w;
+  //   const scrollPercent = elem.scrollLeft / leftEnd;
+  //   // const startCoord = boxStart.current;
+
+  //   const newViewStart = getViewStartCoord(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent);
+  //   // coord of first char in view port
+  //   setViewStart(newViewStart);
+
+  //   // record scroll percent for 1k to sync to
+  //   setSyncScrollPercent(scrollPercent);
+
+  //   if (scrollPercent < 0.05 && !isReplacing) { // scroll past left edge
+  //     setIsReplacing(true);
+  //     // shift display window to the left by boxSeqHalfLen
+  //     const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords('left');
+  //     setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
+
+  //     // update display Start and End after setting the sequence, or else it'll reset it with new start and end
+  //     setTimeout(() => {
+  //       elem.scrollLeft += 0.5 * full_w;
+  //       setIsReplacing(false);
+  //       boxStart.current = newBoxStart;
+  //       boxEnd.current = newBoxEnd;
+  //       // update full seq by padding more to the left
+  //       if (updateSeq) { updateFullSeqLeft(); }
+  //       // update tooltips
+  //       setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
+  //     }, 10);
+
+  //   } else if (scrollPercent > 0.95 && !isReplacing) { // scroll past right edge
+  //     setIsReplacing(true);
+  //     const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords('right');
+  //     setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
+
+  //     // update display Start and End after setting the sequence, or else it'll reset it with new start and end
+  //     setTimeout(() => {
+  //       elem.scrollLeft -= 0.5 * full_w;
+  //       setIsReplacing(false);
+  //       boxStart.current = newBoxStart;
+  //       boxEnd.current = newBoxEnd;
+  //       // update full seq by padding more to the left
+  //       if (updateSeq) { updateFullSeqRight(); }
+  //       // update tooltips
+  //       setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
+  //     }, 10);
+
+  //   }
+  // };
 
   const updateFullSeqLeft = async () => {
     // Fetch additional sequence to pad on the left
@@ -374,6 +491,7 @@ function App() {
   // onnx session to run puffin inference
   const [plotData, setPlotData] = useState(null);
   const [plotLayout, setPlotLayout] = useState(null);
+  const plotRef = useRef(null);
 
   const runInferenceAndPlot = async () => {
     try {
@@ -394,13 +512,11 @@ function App() {
         seqEncoded.map(row => row[colIndex])
       );
       const seqEncodedTensor = new ort.Tensor('float32', seqTransposed.flat(), [1, 4, plotFullSeq.current.length])
-      console.log(seqEncoded);
 
       // Run inference
       const feeds = { [session.inputNames[0]]: seqEncodedTensor };
       const results = await session.run(feeds);
 
-      console.log(results['motif1'].data);
 
       // Extract outputs
       const motifs = Array.from({ length: 18 }, (_, i) =>
@@ -493,7 +609,7 @@ function App() {
       setPlotLayout({
         title: 'Puffin Model Plot',
         height: 800,
-        width: 1400,
+        width: boxSeqFullWidth.current,
         template: 'plotly_white',
         grid: { rows: 4, columns: 1, pattern: 'independent' },
       });
@@ -507,6 +623,10 @@ function App() {
   useEffect(() => {
     if (plotFullSeq.current) {
       runInferenceAndPlot();
+
+      // setTimeout(() => {
+      //   plotRef.current.scrollLeft = boxSeqFullWidth.current * 0.5;
+      // }, 500);
     }
   }, [seqInited]);
 
@@ -598,7 +718,8 @@ function App() {
             <div
               className="bg-gray-50 pt-1 pb-2 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
               ref={seqBoxRef}
-              onScroll={handleScroll}
+              // onScroll={handleScroll}
+              onScroll={handleSeqBoxScroll}
               style={{ whiteSpace: "nowrap" }}
             >
               {boxSeq
@@ -631,12 +752,15 @@ function App() {
           />
 
           {/* plotly puffin */}
-          <div>
-            {plotData && plotLayout ? (
+          <div className='overflow-x-auto'
+            ref={plotRef}
+            onScroll={handlePlotScroll}
+          >
+            {plotData && plotLayout && boxSeqFullWidth.current ? (
               <Plot
                 data={plotData}
                 layout={plotLayout}
-                config={{ responsive: true }}
+                config={{ responsive: false }}
               />
             ) : (
               <p>Loading plot...</p>
