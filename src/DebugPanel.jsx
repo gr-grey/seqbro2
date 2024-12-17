@@ -11,7 +11,7 @@ const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, f
                     <li><span> box seq width:</span> {boxSeqFullWidth.current}</li>
                     <li><span> box view width:</span> {boxWidth.current}</li>
                     <li><span> viewSeqLen:</span> {viewSeqLen.current}</li>
-                    <li><span> scroll percent</span> {syncScrollPercent}</li>
+                    <li><span> scroll percent</span> {syncScrollPercent.current}</li>
                     <li>
                         <span> Full seq Start - End (zero based, exclude last) coordinate:</span>
                         {fullStart.current} - {fullEnd.current}

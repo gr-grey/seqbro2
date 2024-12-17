@@ -8,8 +8,6 @@ import GenomeForm from './GenomeForm';
 import DallianceViewer from './DallianceViewer';
 import Plot from 'react-plotly.js';
 
-// todo:
-// - change full seq to ref and not state - since it does not involve in state variables
 function App() {
   // get sequence
   const [genome, setGenome] = useState("hg38");
@@ -51,7 +49,7 @@ function App() {
   const [isReplacing, setIsReplacing] = useState(false);
   const [seqInited, setSeqInited] = useState(false);
 
-  const [syncScrollPercent, setSyncScrollPercent] = useState(0);
+  const syncScrollPercent = useRef(0);
   const [toolTips, setToolTips] = useState([]);
 
   // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
@@ -146,7 +144,7 @@ function App() {
       const view_w = boxWidth.current;
       const halfway = (full_w - view_w) / 2;
       seqBoxRef.current.scrollLeft = halfway;
-      setSyncScrollPercent(0.5);
+      syncScrollPercent.current = 0.5;
 
       // init viewing char number
       const viewLen = boxSeqLen / full_w * view_w;
@@ -174,7 +172,7 @@ function App() {
       // update varaibles
       boxWidth.current = box_w;
       viewSeqLen.current = viewLen;
-      setSyncScrollPercent(scrollPercent);
+      syncScrollPercent.current = scrollPercent;
 
       updateDallianceCoord(browserRef, newViewStart, viewLen);
     }
@@ -270,7 +268,7 @@ function App() {
   // and syncing between seqBoxRef and plotRef
 
   // Function to sync scroll positions between refs
- // Ref to prevent circular scroll updates
+  // Ref to prevent circular scroll updates
   const isSyncingScroll = useRef(false);
   const syncScroll = (sourceElem, targetElem) => {
     if (!sourceElem || !targetElem) return;
@@ -278,17 +276,18 @@ function App() {
     // Prevent triggering a sync if already in progress
     if (isSyncingScroll.current) return;
 
-    // Calculate scroll percentage
+    const scrollTarget = sourceElem.scrollLeft;
+    // Calculate scroll percentage for the only purpose of tracking and debugging
     const scrollPercent =
-      sourceElem.scrollLeft / (sourceElem.scrollWidth - sourceElem.clientWidth);
-    setSyncScrollPercent(scrollPercent);
+      scrollTarget / (boxSeqFullWidth.current - boxWidth.current);
+    // sourceElem.scrollLeft / (sourceElem.scrollWidth - sourceElem.clientWidth);
+    syncScrollPercent.current = scrollPercent;
 
-    const targetScrollWidth = targetElem.scrollWidth - targetElem.clientWidth;
-    const newScrollLeft = scrollPercent * targetScrollWidth;
-
+    // const targetScrollWidth = targetElem.scrollWidth - targetElem.clientWidth;
+    // const newScrollLeft = scrollPercent * targetScrollWidth;
     // Set the flag and update the target scroll position
     isSyncingScroll.current = true;
-    targetElem.scrollLeft = newScrollLeft;
+    targetElem.scrollLeft = scrollTarget;
 
     // Reset the flag after the browser processes the scroll
     requestAnimationFrame(() => {
@@ -351,7 +350,7 @@ function App() {
       handleInfiniteScroll(seqElem);
 
       // Sync plot scrolling
-      syncScroll(seqElem, plotElem);
+      // syncScroll(seqElem, plotElem);
     }
   };
 
@@ -362,7 +361,7 @@ function App() {
 
     if (plotElem) {
       // Sync sequence box scrolling
-      syncScroll(plotElem, seqElem);
+      // syncScroll(plotElem, seqElem);
 
       // Future: Add infinite scroll logic 
     }
@@ -550,8 +549,9 @@ function App() {
     setPlotData(traces);
     setPlotLayout({
       title: 'Puffin Model Plot',
-      height: 800,
-      width: boxSeqFullWidth.current,
+      height: 500,
+      // width: boxSeqFullWidth.current,
+      width: boxWidth.current,
       template: 'plotly_white',
       grid: { rows: 4, columns: 1, pattern: 'independent' },
     });
@@ -563,12 +563,12 @@ function App() {
     const initPlot = async () => {
       const inputSequence = plotFullSeq.current; // Replace with your input sequence source
       const outputs = await runInference(inputSequence, '/testnet0.onnx');
-
+      console.log('init plot');
       if (outputs) {
         setPlotDataAndLayout(outputs);
       }
     };
-    
+
     if (plotFullSeq.current && seqInited) {
       initPlot();
     }
@@ -684,8 +684,6 @@ function App() {
                   // </span>
                 ))
                 : "Loading...."}
-              {/* Center line for debug */}
-              <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
             </div>
           </div>
 
@@ -712,7 +710,10 @@ function App() {
           </div>
 
           <DebugPanel {...debugVars} />
+          {/* Center line for debug */}
+          <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
         </div>
+
       </div>
     </>
   );
