@@ -10,8 +10,6 @@ import Plot from 'react-plotly.js';
 
 // todo:
 // - change full seq to ref and not state - since it does not involve in state variables
-
-
 function App() {
   // get sequence
   const [genome, setGenome] = useState("hg38");
@@ -31,7 +29,7 @@ function App() {
 
   const fullStart = useRef(null); const fullEnd = useRef(null);
   const boxStart = useRef(null); const boxEnd = useRef(null);
-  const [fullSeq, setFullSeq] = useState("");
+  const fullSeq = useRef(null);
   const [boxSeq, setBoxSeq] = useState("");
 
   // inference
@@ -120,7 +118,7 @@ function App() {
       boxStart.current = box_start;
       boxEnd.current = box_end;
       // update sequence
-      setFullSeq(seq);
+      fullSeq.current = seq;
       setBoxSeq(seq.slice(box_start - full_start, box_end - full_start));
       // test: plot seq halflen = 500 + 325, plus strand only
       const plotStart = coordinate - boxSeqHalfLen - puffin_offset;
@@ -272,17 +270,7 @@ function App() {
   // and syncing between seqBoxRef and plotRef
 
   // Function to sync scroll positions between refs
-  // const syncScroll = (sourceElem, targetElem) => {
-  //   const scrollPercent =
-  //     sourceElem.scrollLeft / (sourceElem.scrollWidth - sourceElem.clientWidth);
-
-  //   if (targetElem) {
-  //     const targetScrollWidth = targetElem.scrollWidth - targetElem.clientWidth;
-  //     targetElem.scrollLeft = scrollPercent * targetScrollWidth;
-  //   }
-  // };
-
-  // Ref to prevent circular scroll updates
+ // Ref to prevent circular scroll updates
   const isSyncingScroll = useRef(false);
   const syncScroll = (sourceElem, targetElem) => {
     if (!sourceElem || !targetElem) return;
@@ -335,7 +323,7 @@ function App() {
     setIsReplacing(true);
     const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } =
       getSwapSeqCoords(direction);
-    setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
+    setBoxSeq(fullSeq.current.slice(sliceStart, sliceEnd));
 
     setTimeout(() => {
       if (direction === "left") elem.scrollLeft += 0.5 * full_w;
@@ -380,60 +368,6 @@ function App() {
     }
   };
 
-  // const handleScroll = async () => {
-
-  //   const elem = seqBoxRef.current;
-  //   const full_w = boxSeqFullWidth.current;
-  //   const box_w = boxWidth.current;
-  //   const leftEnd = full_w - box_w;
-  //   const scrollPercent = elem.scrollLeft / leftEnd;
-  //   // const startCoord = boxStart.current;
-
-  //   const newViewStart = getViewStartCoord(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent);
-  //   // coord of first char in view port
-  //   setViewStart(newViewStart);
-
-  //   // record scroll percent for 1k to sync to
-  //   setSyncScrollPercent(scrollPercent);
-
-  //   if (scrollPercent < 0.05 && !isReplacing) { // scroll past left edge
-  //     setIsReplacing(true);
-  //     // shift display window to the left by boxSeqHalfLen
-  //     const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords('left');
-  //     setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
-
-  //     // update display Start and End after setting the sequence, or else it'll reset it with new start and end
-  //     setTimeout(() => {
-  //       elem.scrollLeft += 0.5 * full_w;
-  //       setIsReplacing(false);
-  //       boxStart.current = newBoxStart;
-  //       boxEnd.current = newBoxEnd;
-  //       // update full seq by padding more to the left
-  //       if (updateSeq) { updateFullSeqLeft(); }
-  //       // update tooltips
-  //       setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
-  //     }, 10);
-
-  //   } else if (scrollPercent > 0.95 && !isReplacing) { // scroll past right edge
-  //     setIsReplacing(true);
-  //     const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords('right');
-  //     setBoxSeq(fullSeq.slice(sliceStart, sliceEnd));
-
-  //     // update display Start and End after setting the sequence, or else it'll reset it with new start and end
-  //     setTimeout(() => {
-  //       elem.scrollLeft -= 0.5 * full_w;
-  //       setIsReplacing(false);
-  //       boxStart.current = newBoxStart;
-  //       boxEnd.current = newBoxEnd;
-  //       // update full seq by padding more to the left
-  //       if (updateSeq) { updateFullSeqRight(); }
-  //       // update tooltips
-  //       setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
-  //     }, 10);
-
-  //   }
-  // };
-
   const updateFullSeqLeft = async () => {
     // Fetch additional sequence to pad on the left
     try {
@@ -441,13 +375,13 @@ function App() {
         // for minus strand, retrive at the end but prepend it 
         const end = fullEnd.current;
         const padLeftSeq = await fetchSequence(end, end + paddingLen);
-        setFullSeq((prevSequence) => padLeftSeq + prevSequence);
+        fullSeq.current = padLeftSeq + fullSeq.current;
         fullEnd.current = end + paddingLen;
       } else {
         const start = fullStart.current;
         // retrive 1000 (padding len) left to the current starting coord
         const padLeftSeq = await fetchSequence(start - paddingLen, start);
-        setFullSeq((prevSequence) => padLeftSeq + prevSequence); // Prepend fetched sequence
+        fullSeq.current = fullSeq.current + padLeftSeq;
         fullStart.current = start - paddingLen; // Adjust seqStart
       }
     } catch (error) {
@@ -462,13 +396,13 @@ function App() {
         // minus strand, same as update right in plus, but append instead of prepend
         const start = fullStart.current;
         const padRightSeq = await fetchSequence(start - paddingLen, start);
-        setFullSeq((prevSequence) => prevSequence + padRightSeq); // Prepend fetched sequence
+        fullSeq.current = fullSeq.current + padRightSeq; // Append fetched sequence
         fullStart.current = start - paddingLen; // Adjust seqStart
       } else {
         const end = fullEnd.current;
         // retrive 1000 (padding len) right to the end starting coord
         const padRightSeq = await fetchSequence(end, end + paddingLen);
-        setFullSeq((prevSequence) => prevSequence + padRightSeq); // Append fetched sequence
+        fullSeq.current = fullSeq.current + padRightSeq; // Append fetched sequence
         fullEnd.current = end + paddingLen; // Adjust full sequence end coord
       }
     } catch (error) {
@@ -493,11 +427,12 @@ function App() {
   const [plotLayout, setPlotLayout] = useState(null);
   const plotRef = useRef(null);
 
-  const runInferenceAndPlot = async () => {
+  const runInference = async (inputSequence, modelPath) => {
     try {
-      const session = await window.ort.InferenceSession.create(`/testnet0.onnx`);
+      const session = await window.ort.InferenceSession.create(modelPath);
 
-      const seqEncoded = Array.from(plotFullSeq.current).map((char) => {
+      // Encode the sequence
+      const seqEncoded = Array.from(inputSequence).map((char) => {
         switch (char) {
           case 'A': return [1, 0, 0, 0];
           case 'C': return [0, 1, 0, 0];
@@ -507,126 +442,135 @@ function App() {
         }
       });
 
-      // Transpose the matrix
       const seqTransposed = seqEncoded[0].map((_, colIndex) =>
         seqEncoded.map(row => row[colIndex])
       );
-      const seqEncodedTensor = new ort.Tensor('float32', seqTransposed.flat(), [1, 4, plotFullSeq.current.length])
+
+      const seqEncodedTensor = new ort.Tensor('float32', seqTransposed.flat(), [1, 4, inputSequence.length]);
 
       // Run inference
       const feeds = { [session.inputNames[0]]: seqEncodedTensor };
       const results = await session.run(feeds);
 
-
-      // Extract outputs
-      const motifs = Array.from({ length: 18 }, (_, i) =>
-        results[`motif${i + 1}`].data
-      );
-      const motifacts = Array.from({ length: 18 }, (_, i) =>
-        results[`motifact${i + 1}`].data
-      );
-      const effects_motif = results["effects_motif"].data;
-      const effects_total = results["effects_total"].data;
-      const effects_inr = results["effects_inr"].data;
-      const effects_sim = results["effects_sim"].data;
-
-      const y_pred = results["y_pred"].data;
-
-      // Plot data
-      const tssList = ['YY1+', 'TATA+', 'U1 snRNP+', 'YY1-', 'ETS+', 'NFY+', 'ETS-', 'NFY-',
-        'CREB+', 'CREB-', 'ZNF143+', 'SP+', 'SP-', 'NRF1-', 'NRF1+',
-        'ZNF143-', 'TATA-', 'U1 snRNP-'];
-
-      const colorArr = ['#1F77B4', '#E41A1C', '#9F9F9F', '#c2d5e8', '#19d3f3', '#00CC96',
-        '#19e4f3', '#00cc5f', '#FF6692', '#ff66c2', '#17a4cf', '#FF7F0E',
-        '#ff930e', '#b663fa', '#AB63FA', '#17BECF', '#ffc6ba', '#CFCFCF'];
-
-      const traces = [];
-
-      // Add Motif Activations to Traces
-      motifacts.forEach((data, index) => {
-        traces.push({
-          y: data,
-          mode: 'lines',
-          name: tssList[index],
-          line: { color: colorArr[index], width: 1 },
-          legendgroup: index.toString(),
-          xaxis: 'x1',
-          yaxis: 'y1',
-        });
-      });
-
-      // Add Motif Effect to Traces
-      motifs.forEach((data, index) => {
-        traces.push({
-          y: data,
-          mode: 'lines',
-          name: tssList[index],
-          line: { color: colorArr[index], width: 1 },
-          legendgroup: index.toString(),
-          xaxis: 'x2',
-          yaxis: 'y2',
-        });
-      });
-
-      // Add Effects to Traces
-      traces.push({
-        y: effects_motif,
-        mode: 'lines',
-        name: 'motif_effects',
-        line: { color: '#445B88', width: 1 },
-        xaxis: 'x3',
-        yaxis: 'y3',
-      });
-      traces.push({
-        y: effects_inr,
-        mode: 'lines',
-        name: 'inr_effects',
-        line: { color: '#445B88', width: 1 },
-        xaxis: 'x3',
-        yaxis: 'y3',
-      });
-      traces.push({
-        y: effects_sim,
-        mode: 'lines',
-        name: 'sim_effects',
-        line: { color: '#445B88', width: 1 },
-        xaxis: 'x3',
-        yaxis: 'y3',
-      });
-
-      traces.push({
-        y: y_pred,
-        mode: 'lines',
-        name: 'y_pred',
-        line: { color: '#143066', width: 1 },
-        xaxis: 'x4',
-        yaxis: 'y4',
-      });
-
-      // Set Plot Data and Layout
-      setPlotData(traces);
-      setPlotLayout({
-        title: 'Puffin Model Plot',
-        height: 800,
-        width: boxSeqFullWidth.current,
-        template: 'plotly_white',
-        grid: { rows: 4, columns: 1, pattern: 'independent' },
-      });
-
+      return results;
     } catch (error) {
-      console.error('Error running inference and plotting:', error);
+      console.error("Error running inference:", error);
+      return null;
     }
   };
 
+  const setPlotDataAndLayout = (results) => {
+
+    // Extract outputs
+    const motifs = Array.from({ length: 18 }, (_, i) =>
+      results[`motif${i + 1}`].data
+    );
+    const motifacts = Array.from({ length: 18 }, (_, i) =>
+      results[`motifact${i + 1}`].data
+    );
+    const effects_motif = results["effects_motif"].data;
+    const effects_total = results["effects_total"].data;
+    const effects_inr = results["effects_inr"].data;
+    const effects_sim = results["effects_sim"].data;
+
+    const y_pred = results["y_pred"].data;
+    // Plot data
+    const tssList = ['YY1+', 'TATA+', 'U1 snRNP+', 'YY1-', 'ETS+', 'NFY+', 'ETS-', 'NFY-',
+      'CREB+', 'CREB-', 'ZNF143+', 'SP+', 'SP-', 'NRF1-', 'NRF1+',
+      'ZNF143-', 'TATA-', 'U1 snRNP-'];
+
+    const colorArr = ['#1F77B4', '#E41A1C', '#9F9F9F', '#c2d5e8', '#19d3f3', '#00CC96',
+      '#19e4f3', '#00cc5f', '#FF6692', '#ff66c2', '#17a4cf', '#FF7F0E',
+      '#ff930e', '#b663fa', '#AB63FA', '#17BECF', '#ffc6ba', '#CFCFCF'];
+
+    const traces = [];
+
+    // Add Motif Activations to Traces
+    motifacts.forEach((data, index) => {
+      traces.push({
+        y: data,
+        mode: 'lines',
+        name: tssList[index],
+        line: { color: colorArr[index], width: 1 },
+        legendgroup: index.toString(),
+        xaxis: 'x1',
+        yaxis: 'y1',
+      });
+    });
+
+    // Add Motif Effect to Traces
+    motifs.forEach((data, index) => {
+      traces.push({
+        y: data,
+        mode: 'lines',
+        name: tssList[index],
+        line: { color: colorArr[index], width: 1 },
+        legendgroup: index.toString(),
+        xaxis: 'x2',
+        yaxis: 'y2',
+      });
+    });
+
+    // Add Effects to Traces
+    traces.push({
+      y: effects_motif,
+      mode: 'lines',
+      name: 'motif_effects',
+      line: { color: '#445B88', width: 1 },
+      xaxis: 'x3',
+      yaxis: 'y3',
+    });
+    traces.push({
+      y: effects_inr,
+      mode: 'lines',
+      name: 'inr_effects',
+      line: { color: '#445B88', width: 1 },
+      xaxis: 'x3',
+      yaxis: 'y3',
+    });
+    traces.push({
+      y: effects_sim,
+      mode: 'lines',
+      name: 'sim_effects',
+      line: { color: '#445B88', width: 1 },
+      xaxis: 'x3',
+      yaxis: 'y3',
+    });
+
+    traces.push({
+      y: y_pred,
+      mode: 'lines',
+      name: 'y_pred',
+      line: { color: '#143066', width: 1 },
+      xaxis: 'x4',
+      yaxis: 'y4',
+    });
+
+    // Set Plot Data and Layout
+    setPlotData(traces);
+    setPlotLayout({
+      title: 'Puffin Model Plot',
+      height: 800,
+      width: boxSeqFullWidth.current,
+      template: 'plotly_white',
+      grid: { rows: 4, columns: 1, pattern: 'independent' },
+    });
+
+  }
+
   // for now only run once at init
   useEffect(() => {
-    if (plotFullSeq.current) {
-      runInferenceAndPlot();
+    const initPlot = async () => {
+      const inputSequence = plotFullSeq.current; // Replace with your input sequence source
+      const outputs = await runInference(inputSequence, '/testnet0.onnx');
 
-      // setTimeout(() => {
-      //   plotRef.current.scrollLeft = boxSeqFullWidth.current * 0.5;
-      // }, 500);
+      if (outputs) {
+        setPlotDataAndLayout(outputs);
+      }
+    };
+    
+    if (plotFullSeq.current && seqInited) {
+      initPlot();
     }
   }, [seqInited]);
 

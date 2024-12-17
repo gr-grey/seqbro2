@@ -18,7 +18,7 @@ const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, f
                     </li>
                     <li><span> Box seq start end:</span> {boxStart.current} - {boxEnd.current}</li>
                     <li>
-                        <span> Full seq length:</span> {fullSeq.length};
+                        <span> Full seq length:</span> {fullSeq.current? fullSeq.current.length : 0};
                         <span> display seq length:</span> {boxSeq.length};
                         <span> plot seq length:</span> {plotFullSeq.current ? plotFullSeq.current.length : 0};
                     </li>
@@ -35,7 +35,7 @@ const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, f
 
                     <li><span> full seq:</span>
                         {/* mini sequence box */}
-                        <div className="block max-w-2xl px-2 border border-gray-200 rounded-md break-words text-gray-700 text-wrap font-mono mt-2">{fullSeq}</div>
+                        <div className="block max-w-2xl px-2 border border-gray-200 rounded-md break-words text-gray-700 text-wrap font-mono mt-2">{fullSeq.current}</div>
                     </li>
 
                     <li><span> box seq:</span>
