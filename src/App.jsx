@@ -321,7 +321,7 @@ function App() {
     setViewStart(newViewStart);
 
     // disable infinite scrolling when in 1k mode
-    if ( !is1kMode && scrollPercent < 0.05 && !isReplacing) {
+    if (!is1kMode && scrollPercent < 0.05 && !isReplacing) {
       triggerInfiniteScroll("left", elem, full_w);
     } else if (!is1kMode && scrollPercent > 0.95 && !isReplacing) {
       triggerInfiniteScroll("right", elem, full_w);
@@ -361,7 +361,9 @@ function App() {
       handleInfiniteScroll(seqElem);
 
       // Sync plot scrolling
-      syncScroll(seqElem, plotElem);
+      if (!is1kMode) {
+        syncScroll(seqElem, plotElem);
+      }
     }
   };
 
@@ -372,7 +374,9 @@ function App() {
 
     if (plotElem) {
       // Sync sequence box scrolling
-      syncScroll(plotElem, seqElem);
+      if (!is1kMode) {
+        syncScroll(plotElem, seqElem);
+      }
 
       // Future: Add infinite scroll logic 
     }
@@ -503,10 +507,16 @@ function App() {
       '#ff930e', '#b663fa', '#AB63FA', '#17BECF', '#ffc6ba', '#CFCFCF'];
 
     const traces = [];
+    const xs =
+      strand === '+'
+      ? range(boxStart.current, boxEnd.current)    // Normal order for '+' strand
+      : range(boxEnd.current, boxStart.current, -1); // Reverse coordinates for '-' strand
+
 
     // Add Motif Activations to Traces
     motifacts.forEach((data, index) => {
       traces.push({
+        x: xs,
         y: data,
         mode: 'lines',
         name: tssList[index],
@@ -520,6 +530,7 @@ function App() {
     // Add Motif Effect to Traces
     motifs.forEach((data, index) => {
       traces.push({
+        x: xs,
         y: data,
         mode: 'lines',
         name: tssList[index],
@@ -532,6 +543,7 @@ function App() {
 
     // Add Effects to Traces
     traces.push({
+      x: xs,
       y: effects_motif,
       mode: 'lines',
       name: 'motif_effects',
@@ -540,6 +552,7 @@ function App() {
       yaxis: 'y3',
     });
     traces.push({
+      x: xs,
       y: effects_inr,
       mode: 'lines',
       name: 'inr_effects',
@@ -548,6 +561,7 @@ function App() {
       yaxis: 'y3',
     });
     traces.push({
+      x: xs,
       y: effects_sim,
       mode: 'lines',
       name: 'sim_effects',
@@ -557,6 +571,7 @@ function App() {
     });
 
     traces.push({
+      x: xs,
       y: y_pred,
       mode: 'lines',
       name: 'y_pred',
@@ -585,9 +600,10 @@ function App() {
     // relayout({ width: newPlotWidth });
     if (!newIs1kMode) { // switching to not 1k mode, aka scroll mode
       // no margin to sync scroll
-      relayout({ margin: { l: 0, r: 0, t: 50, b: 20 }, showlegend: false, width:newPlotWidth});
+      relayout({ margin: { l: 0, r: 0, t: 50, b: 20 }, showlegend: false, width: newPlotWidth });
+      setTimeout(() => { syncScroll(plotRef.current, seqBoxRef.current); }, 10);
     } else {
-      relayout({margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 }, showlegend: showLegend, width: newPlotWidth,});
+      relayout({ margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 }, showlegend: showLegend, width: newPlotWidth, });
     }
   };
 
@@ -608,8 +624,13 @@ function App() {
       console.log('init plot');
       if (outputs) {
         setPlotData(getPlotData(outputs));
+        const xaxisLayout = { tickformat: 'd', autorange: strand === '-' ? 'reversed' : true, };
         setPlotLayout({
           // title: 'Puffin Model Plot',
+          xaxis: xaxisLayout,
+          xaxis2: xaxisLayout,
+          xaxis3: xaxisLayout,
+          xaxis4: xaxisLayout,
           height: 500,
           // width: boxSeqFullWidth.current,
           width: is1kMode ? boxWidth.current : boxSeqFullWidth.current,
@@ -618,6 +639,11 @@ function App() {
           margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 },
           legend: plotLegendLayout,
         });
+      }
+
+      // sync to seqbox if not 1k
+      if (!is1kMode) {
+        setTimeout(() => { syncScroll(plotRef.current, seqBoxRef.current) }, 0);
       }
     };
 
@@ -629,7 +655,7 @@ function App() {
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode};
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -762,7 +788,7 @@ function App() {
             </div>
 
             {/* Legend Toggle */}
-            {is1kMode &&(<div className="flex items-center space-x-2">
+            {is1kMode && (<div className="flex items-center space-x-2">
               <span className="text-gray-700 font-medium">Show Legend</span>
               <label className="relative inline-flex cursor-pointer items-center">
                 <input
@@ -777,7 +803,7 @@ function App() {
           </div>
 
           {/* plotly puffin */}
-          <div className='overflow-x-auto'
+          <div className='overflow-x-auto border border-gray-300'
             ref={plotRef}
             onScroll={handlePlotScroll}
           >
