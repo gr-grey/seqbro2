@@ -52,6 +52,9 @@ function App() {
   const syncScrollPercent = useRef(0);
   const [toolTips, setToolTips] = useState([]);
 
+  // toggle 1k full view or local sync view
+  const [is1kMode, setIs1kMode] = useState(false);
+
   // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
   const range = (start, stop, step = 1) =>
     Array.from(
@@ -175,6 +178,13 @@ function App() {
       syncScrollPercent.current = scrollPercent;
 
       updateDallianceCoord(browserRef, newViewStart, viewLen);
+
+      console.log(is1kMode);
+      // update plot widths for 1k view
+      if (is1kMode) {
+        // updatePlotWidth(box_w);
+        relayout({ width: box_w });
+      }
     }
   };
 
@@ -189,7 +199,7 @@ function App() {
     return () => {
       if (seqBoxRef.current) { observer.unobserve(seqBoxRef.current); }
     };
-  }, [seqBoxRef]);
+  }, [seqBoxRef, is1kMode]);
 
   // Remap the mouse scrolling up and down to left and right
   // within SequenceBox
@@ -310,9 +320,10 @@ function App() {
     );
     setViewStart(newViewStart);
 
-    if (scrollPercent < 0.05 && !isReplacing) {
+    // disable infinite scrolling when in 1k mode
+    if ( !is1kMode && scrollPercent < 0.05 && !isReplacing) {
       triggerInfiniteScroll("left", elem, full_w);
-    } else if (scrollPercent > 0.95 && !isReplacing) {
+    } else if (!is1kMode && scrollPercent > 0.95 && !isReplacing) {
       triggerInfiniteScroll("right", elem, full_w);
     }
   };
@@ -350,7 +361,7 @@ function App() {
       handleInfiniteScroll(seqElem);
 
       // Sync plot scrolling
-      // syncScroll(seqElem, plotElem);
+      syncScroll(seqElem, plotElem);
     }
   };
 
@@ -361,7 +372,7 @@ function App() {
 
     if (plotElem) {
       // Sync sequence box scrolling
-      // syncScroll(plotElem, seqElem);
+      syncScroll(plotElem, seqElem);
 
       // Future: Add infinite scroll logic 
     }
@@ -458,7 +469,16 @@ function App() {
     }
   };
 
-  const setPlotDataAndLayout = (results) => {
+  const plotLeftMargin = 10;
+  const plotLegendLayout = {
+    y: 1.0, x: 1.0,
+    xanchor: 'right', yanchor: 'top',
+    scroll: true, // Enable scrolling for the legend
+    bgcolor: 'rgba(255, 255, 255, 0.6)',
+    bordercolor: 'rgba(0, 0, 0, 0.1)',
+    borderwidth: 1,
+  };
+  const getPlotData = (results) => {
 
     // Extract outputs
     const motifs = Array.from({ length: 18 }, (_, i) =>
@@ -504,7 +524,7 @@ function App() {
         mode: 'lines',
         name: tssList[index],
         line: { color: colorArr[index], width: 1 },
-        legendgroup: index.toString(),
+        showlegend: false,
         xaxis: 'x2',
         yaxis: 'y2',
       });
@@ -546,17 +566,39 @@ function App() {
     });
 
     // Set Plot Data and Layout
-    setPlotData(traces);
-    setPlotLayout({
-      title: 'Puffin Model Plot',
-      height: 500,
-      // width: boxSeqFullWidth.current,
-      width: boxWidth.current,
-      template: 'plotly_white',
-      grid: { rows: 4, columns: 1, pattern: 'independent' },
-    });
-
+    return traces;
   }
+
+  const relayout = (updates) => {
+    setPlotLayout((prevLayout) => ({
+      ...prevLayout,
+      ...updates, // Merge new updates into the existing layout
+    }));
+  };
+
+  // toggle on and off 1k button
+  const handle1kToggle = () => {
+    const newIs1kMode = !is1kMode;
+    setIs1kMode(newIs1kMode);
+    const newPlotWidth = newIs1kMode ? boxWidth.current : boxSeqFullWidth.current;
+    // updatePlotWidth(newPlotWidth);
+    // relayout({ width: newPlotWidth });
+    if (!newIs1kMode) { // switching to not 1k mode, aka scroll mode
+      // no margin to sync scroll
+      relayout({ margin: { l: 0, r: 0, t: 50, b: 20 }, showlegend: false, width:newPlotWidth});
+    } else {
+      relayout({margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 }, showlegend: showLegend, width: newPlotWidth,});
+    }
+  };
+
+  // toggle button for showing legend
+  const [showLegend, setShowLegend] = useState(true);
+
+  const toggleLegend = () => {
+    const newShowLegend = !showLegend;
+    setShowLegend(newShowLegend);
+    relayout({ showlegend: newShowLegend });
+  };
 
   // for now only run once at init
   useEffect(() => {
@@ -565,7 +607,17 @@ function App() {
       const outputs = await runInference(inputSequence, '/testnet0.onnx');
       console.log('init plot');
       if (outputs) {
-        setPlotDataAndLayout(outputs);
+        setPlotData(getPlotData(outputs));
+        setPlotLayout({
+          // title: 'Puffin Model Plot',
+          height: 500,
+          // width: boxSeqFullWidth.current,
+          width: is1kMode ? boxWidth.current : boxSeqFullWidth.current,
+          template: 'plotly_white',
+          grid: { rows: 4, columns: 1, pattern: 'independent' },
+          margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 },
+          legend: plotLegendLayout,
+        });
       }
     };
 
@@ -577,7 +629,7 @@ function App() {
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq, };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode};
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -611,7 +663,7 @@ function App() {
         {/* Right side */}
         <div className="w-3/4 flex-grow p-2 relative overflow-visible">
           {/* sequence box */}
-          <div className="relative">
+          <div className={`relative`}>
             <div className="flex ml-2 mb-2">
               <button
                 onMouseDown={() => startScrolling(-30)} // scroll left
@@ -632,7 +684,7 @@ function App() {
             </div>
 
             {/* Ruler */}
-            <div className="relative pt-3 pb-3 ml-2 mr-2 bg-white border-b border-gray-800">
+            <div className="relative pt-3 pb-3 bg-white border-b border-gray-800">
 
               <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
                 style={{ left: "0%", transform: "translateX(0%)" }}
@@ -660,7 +712,7 @@ function App() {
             </div>
 
             <div
-              className="bg-gray-50 pt-1 pb-2 ml-2 mr-2 border border-gray-300 overflow-x-auto font-mono"
+              className="bg-gray-50 pt-1 pb-2 border border-gray-300 overflow-x-auto font-mono"
               ref={seqBoxRef}
               // onScroll={handleScroll}
               onScroll={handleSeqBoxScroll}
@@ -692,6 +744,37 @@ function App() {
             browserRef={browserRef}
             chromosome={chromosome}
           />
+
+          {/* two toggle buttons */}
+          <div className="flex justify-between items-center w-full px-1 py-2">
+            {/* 1k Mode Toggle */}
+            <div className="flex items-center space-x-2">
+              <span className="text-gray-700 font-medium">1K Mode (no infinite scroll)</span>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={is1kMode}
+                  onChange={handle1kToggle}
+                  className="peer sr-only"
+                />
+                <div className="peer h-6 w-11 rounded-full border bg-slate-200 after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-sky-800 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-green-300"></div>
+              </label>
+            </div>
+
+            {/* Legend Toggle */}
+            {is1kMode &&(<div className="flex items-center space-x-2">
+              <span className="text-gray-700 font-medium">Show Legend</span>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={showLegend}
+                  onChange={toggleLegend}
+                  className="peer sr-only"
+                />
+                <div className="peer h-6 w-11 rounded-full border bg-slate-200 after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-sky-800 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-green-300"></div>
+              </label>
+            </div>)}
+          </div>
 
           {/* plotly puffin */}
           <div className='overflow-x-auto'

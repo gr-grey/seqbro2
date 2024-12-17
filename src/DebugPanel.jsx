@@ -1,6 +1,6 @@
 import React from "react";
 
-const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq}) => {
+const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode}) => {
 
     return (
         <>
@@ -8,6 +8,7 @@ const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, f
                 <h1>Debug:</h1>
                 <ul className="space-y-2 text-sm">
                     <li><span> --------SeqBox scrolling tracking---------</span></li>
+                    <li><span> 1k mode: </span> {`${is1kMode}`}</li>
                     <li><span> box seq width:</span> {boxSeqFullWidth.current}</li>
                     <li><span> box view width:</span> {boxWidth.current}</li>
                     <li><span> viewSeqLen:</span> {viewSeqLen.current}</li>
