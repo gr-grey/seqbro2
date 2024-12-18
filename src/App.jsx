@@ -40,10 +40,19 @@ function App() {
   const boxSeqFullWidth = useRef(null);
   // seqBox on page, width in px, old clientWidth
   const boxWidth = useRef(null);
+  // scrollWidth - clientWidth, the farthest scrollLeft can be
+  const scrollLeftMax = useRef(null);
   // of the 1000 char in seqBox, how many are in view box
   const viewSeqLen = useRef(null);
   // coords at left end of ruler
   const [viewStart, setViewStart] = useState(null);
+
+  // scrolling and syncing vars
+  // track whether we are scrolling in seqbox or in plotbox
+  const scrollingBox = useRef(null);
+  // record scrollLeft for the other box to sync to
+  const scrollLeft = useRef(null);
+  const isSyncingScroll = useRef(false);
 
   // Track if sequence is being replaced
   const [isReplacing, setIsReplacing] = useState(false);
@@ -83,9 +92,9 @@ function App() {
   // get ruler maker/ tick coordinates, count for strand
   const getRulerTickCoord = (percent) => {
     if (strand === '-') {
-      return Math.round(viewStart - percent * viewSeqLen.current);
+      return Math.round(viewStart - percent * viewSeqLen.current + 0.5);
     } else {
-      return Math.round(viewStart + percent * viewSeqLen.current);
+      return Math.round(viewStart + percent * viewSeqLen.current - 0.5);
     }
   };
 
@@ -126,15 +135,10 @@ function App() {
       const plotEnd = coordinate + boxSeqHalfLen + puffin_offset;
       plotFullSeq.current = seq.slice(plotStart - full_start, plotEnd - full_start);
 
-      // set box widths (client and scroll width) after sequences were set
       setTimeout(() => {
-        if (seqBoxRef.current) {
-          boxWidth.current = seqBoxRef.current.clientWidth;
-          boxSeqFullWidth.current = seqBoxRef.current.scrollWidth;
-          setSeqInited(true);
-          // init tooltips
-          setToolTips(getToolTips(box_start, box_end, strand));
-        }
+        setSeqInited(true);
+        // init tooltips
+        setToolTips(getToolTips(box_start, box_end, strand));
       }, 10);
     }
     init();
@@ -142,18 +146,30 @@ function App() {
 
   // manually scroll to 50% after sequences were inited
   useEffect(() => {
-    if (seqBoxRef.current && boxSeqFullWidth.current && seqInited) {
-      const full_w = boxSeqFullWidth.current;
-      const view_w = boxWidth.current;
-      const halfway = (full_w - view_w) / 2;
-      seqBoxRef.current.scrollLeft = halfway;
-      syncScrollPercent.current = 0.5;
+    if (seqBoxRef.current && seqInited) {
+      // set box widths (client and scroll width) after sequences were set
+      const full_w = seqBoxRef.current.scrollWidth;
+      const view_w = seqBoxRef.current.clientWidth;
+      const lmax = full_w - view_w;
+      // seq len = 1000, even num, need to shift right by half a character
+      const middlePoint = 0.500 +  1 / boxSeqLen / 2;
+      seqBoxRef.current.scrollLeft = lmax * middlePoint;
+      // init scrollLeft value and scrollBox
+      scrollLeft.current = lmax * middlePoint;
+      scrollingBox.current = 'seqBox';
 
       // init viewing char number
       const viewLen = boxSeqLen / full_w * view_w;
       viewSeqLen.current = viewLen;
+      // update global varialbes
+      boxSeqFullWidth.current = full_w;
+      boxWidth.current = view_w;
+      scrollLeftMax.current = lmax;
+      syncScrollPercent.current = middlePoint;
+
       // init view start coord
-      setViewStart(getViewStartCoord(boxStart.current, boxSeqLen, viewLen, 0.5));
+      setViewStart(getViewStartCoord(boxStart.current, boxSeqLen, viewLen, middlePoint));
+      // console.log({bstart: boxStart.current, boxSeqLen: boxSeqLen, viewSeqLen: viewLen });
     }
   }, [seqInited]);
 
@@ -164,7 +180,8 @@ function App() {
       const full_w = boxSeqFullWidth.current;
       const box_w = seqBoxRef.current.clientWidth;
       const leftEnd = full_w - box_w;
-      const scrollPercent = seqBoxRef.current.scrollLeft / leftEnd;
+      const scroll_left = seqBoxRef.current.scrollLeft;
+      const scrollPercent = scroll_left / leftEnd;
 
       const viewLen = boxSeqLen / full_w * box_w;
       // coord of first char in view port
@@ -176,10 +193,10 @@ function App() {
       boxWidth.current = box_w;
       viewSeqLen.current = viewLen;
       syncScrollPercent.current = scrollPercent;
+      scrollLeft.current = scroll_left;
 
       updateDallianceCoord(browserRef, newViewStart, viewLen);
 
-      console.log(is1kMode);
       // update plot widths for 1k view
       if (is1kMode) {
         // updatePlotWidth(box_w);
@@ -277,32 +294,31 @@ function App() {
   // modularize handle scroll, separate infinite scrolling, trigger swapping
   // and syncing between seqBoxRef and plotRef
 
-  // Function to sync scroll positions between refs
-  // Ref to prevent circular scroll updates
-  const isSyncingScroll = useRef(false);
-  const syncScroll = (sourceElem, targetElem) => {
-    if (!sourceElem || !targetElem) return;
+  // set scrollingBox based on where the mouse is
 
-    // Prevent triggering a sync if already in progress
-    if (isSyncingScroll.current) return;
+  const handleMouseEnterSeqBox = () => {
+    scrollingBox.current = 'seqBox';
+  };
+  
+  const handleMouseEnterPlot = () => {
+    scrollingBox.current = 'plot';
+  };
+  // split syncScroll into two functions to avoid confusion
+  // when we scroll in seqBox, sync plot to seqBox
+  const seqBoxSyncScroll = () => {
+    // if (scrollingBox.current !== 'seqBox') return;
 
-    const scrollTarget = sourceElem.scrollLeft;
-    // Calculate scroll percentage for the only purpose of tracking and debugging
-    const scrollPercent =
-      scrollTarget / (boxSeqFullWidth.current - boxWidth.current);
-    // sourceElem.scrollLeft / (sourceElem.scrollWidth - sourceElem.clientWidth);
-    syncScrollPercent.current = scrollPercent;
+    const scrollPoint = seqBoxRef.current.scrollLeft;
+    plotRef.current.scrollLeft = scrollPoint;
+    scrollLeft.current = scrollPoint;
+    syncScrollPercent.current = scrollPoint / scrollLeftMax.current;
+  };
 
-    // const targetScrollWidth = targetElem.scrollWidth - targetElem.clientWidth;
-    // const newScrollLeft = scrollPercent * targetScrollWidth;
-    // Set the flag and update the target scroll position
-    isSyncingScroll.current = true;
-    targetElem.scrollLeft = scrollTarget;
-
-    // Reset the flag after the browser processes the scroll
-    requestAnimationFrame(() => {
-      isSyncingScroll.current = false;
-    });
+  const plotSyncScroll = () => {
+    const scrollPoint = plotRef.current.scrollLeft;
+    seqBoxRef.current.scrollLeft = scrollPoint;
+    scrollLeft.current = scrollPoint;
+    syncScrollPercent.current = scrollPoint / scrollLeftMax.current;
   };
 
   // Function to handle infinite scrolling logic
@@ -354,28 +370,24 @@ function App() {
   // Sequence box scroll handler
   const handleSeqBoxScroll = () => {
     const seqElem = seqBoxRef.current;
-    const plotElem = plotRef.current;
 
     if (seqElem) {
       // Handle infinite scrolling for the sequence box
       handleInfiniteScroll(seqElem);
 
       // Sync plot scrolling
-      if (!is1kMode) {
-        syncScroll(seqElem, plotElem);
+      if (!is1kMode && scrollingBox.current === 'seqBox') {
+        seqBoxSyncScroll();
       }
     }
   };
 
   // Plot scroll handler
   const handlePlotScroll = () => {
-    const seqElem = seqBoxRef.current;
-    const plotElem = plotRef.current;
-
-    if (plotElem) {
+    if ( plotRef.current) {
       // Sync sequence box scrolling
-      if (!is1kMode) {
-        syncScroll(plotElem, seqElem);
+      if (!is1kMode && scrollingBox.current === 'plot') {
+        plotSyncScroll();
       }
 
       // Future: Add infinite scroll logic 
@@ -492,7 +504,7 @@ function App() {
       results[`motifact${i + 1}`].data
     );
     const effects_motif = results["effects_motif"].data;
-    const effects_total = results["effects_total"].data;
+    // const effects_total = results["effects_total"].data;
     const effects_inr = results["effects_inr"].data;
     const effects_sim = results["effects_sim"].data;
 
@@ -509,8 +521,8 @@ function App() {
     const traces = [];
     const xs =
       strand === '+'
-      ? range(boxStart.current, boxEnd.current)    // Normal order for '+' strand
-      : range(boxEnd.current, boxStart.current, -1); // Reverse coordinates for '-' strand
+        ? range(boxStart.current, boxEnd.current)    // Normal order for '+' strand
+        : range(boxEnd.current, boxStart.current, -1); // Reverse coordinates for '-' strand
 
 
     // Add Motif Activations to Traces
@@ -601,14 +613,14 @@ function App() {
     if (!newIs1kMode) { // switching to not 1k mode, aka scroll mode
       // no margin to sync scroll
       relayout({ margin: { l: 0, r: 0, t: 50, b: 20 }, showlegend: false, width: newPlotWidth });
-      setTimeout(() => { syncScroll(plotRef.current, seqBoxRef.current); }, 10);
+      setTimeout(() => { seqBoxSyncScroll(); }, 10);
     } else {
       relayout({ margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 }, showlegend: showLegend, width: newPlotWidth, });
     }
   };
 
   // toggle button for showing legend
-  const [showLegend, setShowLegend] = useState(true);
+  const [showLegend, setShowLegend] = useState(false);
 
   const toggleLegend = () => {
     const newShowLegend = !showLegend;
@@ -641,9 +653,10 @@ function App() {
         });
       }
 
-      // sync to seqbox if not 1k
-      if (!is1kMode) {
-        setTimeout(() => { syncScroll(plotRef.current, seqBoxRef.current) }, 0);
+      if (!is1kMode && plotRef.current && scrollLeftMax.current) {
+        // manually scroll to halfway
+        const middlePoint = 0.500 +  1 / boxSeqLen / 2;
+        setTimeout(() => { plotRef.current.scrollLeft = middlePoint * scrollLeftMax.current; }, 10);
       }
     };
 
@@ -655,7 +668,7 @@ function App() {
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode, scrollingBox, scrollLeft, scrollLeftMax };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -743,6 +756,7 @@ function App() {
               // onScroll={handleScroll}
               onScroll={handleSeqBoxScroll}
               style={{ whiteSpace: "nowrap" }}
+              onMouseEnter={handleMouseEnterSeqBox}
             >
               {boxSeq
                 ? boxSeq.split("").map((char, index) => (
@@ -806,6 +820,7 @@ function App() {
           <div className='overflow-x-auto border border-gray-300'
             ref={plotRef}
             onScroll={handlePlotScroll}
+            onMouseEnter={handleMouseEnterPlot}
           >
             {plotData && plotLayout && boxSeqFullWidth.current ? (
               <Plot
