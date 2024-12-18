@@ -83,18 +83,18 @@ function App() {
   // calculate coord at the left of the ruler, count for strand
   const getViewStartCoord = (start, scrollChar, clientChar, scrollPercent) => {
     if (strand === '-') {
-      return Math.round(start + scrollChar - (scrollChar - clientChar) * scrollPercent);
+      return start + scrollChar - (scrollChar - clientChar) * scrollPercent
     } else {
-      return Math.round(start + (scrollChar - clientChar) * scrollPercent);
+      return start + (scrollChar - clientChar) * scrollPercent
     }
   };
 
   // get ruler maker/ tick coordinates, count for strand
   const getRulerTickCoord = (percent) => {
     if (strand === '-') {
-      return Math.round(viewStart - percent * viewSeqLen.current + 0.5);
+      return Math.floor(viewStart - percent * viewSeqLen.current);
     } else {
-      return Math.round(viewStart + percent * viewSeqLen.current - 0.5);
+      return Math.floor(viewStart + percent * viewSeqLen.current);
     }
   };
 
@@ -678,9 +678,9 @@ function App() {
 
   const updateDallianceCoord = (browserRef, viewStart, viewLen) => {
     if (strand === '+') {
-      browserRef.current.setLocation(chromosome, viewStart, Math.round(viewStart + viewLen));
+      browserRef.current.setLocation(chromosome, Math.floor(viewStart), Math.floor(viewStart + viewLen));
     } else { // minus strand
-      browserRef.current.setLocation(chromosome, Math.round(viewStart - viewLen), viewStart);
+      browserRef.current.setLocation(chromosome, Math.floor(viewStart - viewLen), Math.floor(viewStart));
     }
   };
   // sync dalliance genome browser as seq view box start coord changes
@@ -728,7 +728,7 @@ function App() {
               <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
                 style={{ left: "0%", transform: "translateX(0%)" }}
               >
-                {viewStart}
+                {Math.floor(viewStart)}
               </div>
 
               <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
