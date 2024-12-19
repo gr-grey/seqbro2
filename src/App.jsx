@@ -53,6 +53,7 @@ function App() {
 
   // Track if sequence is being replaced
   const [isReplacing, setIsReplacing] = useState(false);
+  // const [isPlotReplacing, setIsPlotReplacing] = useState(false);
   const [seqInited, setSeqInited] = useState(false);
 
   const syncScrollPercent = useRef(0);
@@ -209,6 +210,7 @@ function App() {
       viewSeqLen.current = viewLen;
       syncScrollPercent.current = scrollPercent;
       scrollLeft.current = scroll_left;
+      scrollLeftMax.current = leftEnd;
 
       // update plot widths for 1k view
       if (is1kMode) {
@@ -268,40 +270,31 @@ function App() {
 
   // swap viewing sequence in display box, counting strand
   const getSwapSeqCoords = (edge) => {
+    let newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq;
     // swapping when scrolling to the left edge
     if (edge === 'left') {
       if (strand === '-') {
-        const newBoxStart = boxStart.current + boxSeqHalfLen;
-        const newBoxEnd = newBoxStart + boxSeqLen;
-        const sliceStart = fullEnd.current - newBoxStart;
-        const sliceEnd = sliceStart + boxSeqLen;
-        const updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
-        return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
+        newBoxStart = boxStart.current + boxSeqHalfLen;
+        newBoxEnd = newBoxStart + boxSeqLen;
+        updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
       } else {
-        const newBoxStart = boxStart.current - boxSeqHalfLen;
-        const newBoxEnd = newBoxStart + boxSeqLen;
-        const sliceStart = newBoxStart - fullStart.current;
-        const sliceEnd = sliceStart + boxSeqLen;
-        const updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
-        return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
+        newBoxStart = boxStart.current - boxSeqHalfLen;
+        newBoxEnd = newBoxStart + boxSeqLen;
+        updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
       }
     } else if (edge === 'right') { // swapping when scroll to right edge
       if (strand === '-') {
-        const newBoxStart = boxStart.current - boxSeqHalfLen;
-        const newBoxEnd = newBoxStart + boxSeqLen;
-        const sliceStart = fullEnd.current - newBoxEnd;
-        const sliceEnd = sliceStart + boxSeqLen;
-        const updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
-        return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
+        newBoxStart = boxStart.current - boxSeqHalfLen;
+        newBoxEnd = newBoxStart + boxSeqLen;
+        updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
       } else {
-        const newBoxStart = boxStart.current + boxSeqHalfLen;
-        const newBoxEnd = newBoxStart + boxSeqLen;
-        const sliceStart = newBoxStart - fullStart.current;
-        const sliceEnd = sliceStart + boxSeqLen;
-        const updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
-        return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
+        newBoxStart = boxStart.current + boxSeqHalfLen;
+        newBoxEnd = newBoxStart + boxSeqLen;
+        updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
       }
     }
+    [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, newBoxStart, newBoxEnd);
+    return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
   };
 
   // modularize handle scroll, separate infinite scrolling, trigger swapping
@@ -316,88 +309,140 @@ function App() {
   const handleMouseEnterPlot = () => {
     scrollingBox.current = 'plot';
   };
-  // split syncScroll into two functions to avoid confusion
-  // when we scroll in seqBox, sync plot to seqBox
-  const seqBoxSyncScroll = () => {
-    // if (scrollingBox.current !== 'seqBox') return;
 
-    const scrollPoint = seqBoxRef.current.scrollLeft;
-    plotRef.current.scrollLeft = scrollPoint;
-    scrollLeft.current = scrollPoint;
-    syncScrollPercent.current = scrollPoint / scrollLeftMax.current;
-  };
+  // update plot data after swapping
+  const updatePlotBuffers = async (direction, newBoxStart, newBoxEnd) => {
+    let newStartBuffer, newViewData, newEndBuffer;
+    if (direction === 'left' && strand === '+') {
+      // shift every thing to left by 500
+      const [start, end] = [newBoxStart - boxSeqHalfLen, newBoxEnd - boxSeqHalfLen];
+      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
+      // run inference and get data
+      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffin_offset, sliceEnd + puffin_offset));
+      newStartBuffer = getPlotData(outputs, start, end);
+      newViewData = plotDataStartBuffer.current;
+      newEndBuffer = plotDataView.current;
 
-  const plotSyncScroll = () => {
-    const scrollPoint = plotRef.current.scrollLeft;
-    seqBoxRef.current.scrollLeft = scrollPoint;
-    scrollLeft.current = scrollPoint;
-    syncScrollPercent.current = scrollPoint / scrollLeftMax.current;
-  };
-
-  // Function to handle infinite scrolling logic
-  const handleInfiniteScroll = (elem) => {
-    const full_w = boxSeqFullWidth.current;
-    const box_w = boxWidth.current;
-    const leftEnd = full_w - box_w;
-    const scrollPercent = elem.scrollLeft / leftEnd;
-
-    setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i)));
-
-    // disable infinite scrolling when in 1k mode
-    if (!is1kMode && scrollPercent < 0.05 && !isReplacing) {
-      triggerInfiniteScroll("left", elem, full_w);
-    } else if (!is1kMode && scrollPercent > 0.95 && !isReplacing) {
-      triggerInfiniteScroll("right", elem, full_w);
+    } else if (direction === 'right' && strand === '+') {
+      // shift every thing left by 500
+      const [start, end] = [newBoxStart + boxSeqHalfLen, newBoxEnd + boxSeqHalfLen];
+      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
+      // run inference and get data
+      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffin_offset, sliceEnd + puffin_offset));
+      newStartBuffer = plotDataView.current;
+      newViewData = plotDataEndBuffer.current;
+      newEndBuffer = getPlotData(outputs, start, end);
+    } else if (direction === 'left' && strand === '-') {
+      // end -> view -> start, shift every thing left by 500, update newEnd, bigger
+      const [start, end] = [newBoxStart + boxSeqHalfLen, newBoxEnd + boxSeqHalfLen];
+      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
+      // run inference and get data
+      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffin_offset, sliceEnd + puffin_offset));
+      newStartBuffer = plotDataView.current;
+      newViewData = plotDataEndBuffer.current;
+      newEndBuffer = getPlotData(outputs, start, end);
+    } else if (direction === 'right' && strand === '-') {
+      // end -> view -> start, shift every thing right by 500, update newStart, smaller
+      const [start, end] = [newBoxStart - boxSeqHalfLen, newBoxEnd - boxSeqHalfLen];
+      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
+      // run inference and get data
+      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffin_offset, sliceEnd + puffin_offset));
+      newStartBuffer = getPlotData(outputs, start, end);
+      newViewData = plotDataStartBuffer.current;
+      newEndBuffer = plotDataView.current;
     }
+    // udpate reference
+    plotDataStartBuffer.current = newStartBuffer;
+    plotDataView.current = newViewData;
+    plotDataEndBuffer.current = newEndBuffer;
   };
 
   // Helper to handle sequence swapping
-  const triggerInfiniteScroll = (direction, elem, full_w) => {
+  const triggerInfiniteScroll = (direction) => {
+
+    const seqBoxElem = seqBoxRef.current;
+    const plotElem = plotRef.current;
+    const full_w = boxSeqFullWidth.current;
     setIsReplacing(true);
     const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } =
       getSwapSeqCoords(direction);
+    // swap with new sequence in seqbox
     setBoxSeq(fullSeq.current.slice(sliceStart, sliceEnd));
 
-    setTimeout(() => {
-      if (direction === "left") elem.scrollLeft += 0.5 * full_w;
-      else elem.scrollLeft -= 0.5 * full_w;
+    // swap with plot
+    if (direction === 'left' && strand === '+') {
+      setPlotData(plotDataStartBuffer.current);
+    } else if (direction === 'left' && strand === '-') {
+      setPlotData(plotDataEndBuffer.current);
+    } else if (direction === 'right' && strand === '+') {
+      setPlotData(plotDataEndBuffer.current);
+    } else if (direction === 'right' && strand === '-') {
+      setPlotData(plotDataStartBuffer.current);
+    }
+
+    // first update display, then update sequence (if needed)
+    // then update plot buffer - always
+    setTimeout(async () => {
+      // scroll by half width to keep the same sequence in display
+      if (direction === "left") {
+        seqBoxElem.scrollLeft += 0.5 * full_w;
+        plotElem.scrollLeft += 0.5 * full_w;
+      } else {
+        seqBoxElem.scrollLeft -= 0.5 * full_w;
+        plotElem.scrollLeft -= 0.5 * full_w;
+      }
 
       setIsReplacing(false);
       boxStart.current = newBoxStart;
       boxEnd.current = newBoxEnd;
 
+      // Update the full sequence if needed
       if (updateSeq) {
-        direction === "left" ? updateFullSeqLeft() : updateFullSeqRight();
+        if (direction === 'left') {
+          await updateFullSeqLeft(); // Await the full sequence update
+        } else {
+          await updateFullSeqRight(); // Await the full sequence update
+        }
       }
 
+      // Once full sequence is updated, update plot buffers
+      await updatePlotBuffers(direction, newBoxStart, newBoxEnd);
       setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
+
+      // update plot data refs
+
     }, 10);
   };
 
-  // Sequence box scroll handler
+  // Sequence box scroll handler, handles infinite scroll for both seqbox and plot
   const handleSeqBoxScroll = () => {
     const seqElem = seqBoxRef.current;
+    const scroll_left = seqElem.scrollLeft;
+    const scrollPercent = scroll_left / scrollLeftMax.current;
 
-    if (seqElem) {
-      // Handle infinite scrolling for the sequence box
-      handleInfiniteScroll(seqElem);
+    setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i)));
+    // udpate reference tracker
+    scrollLeft.current = scroll_left;
+    syncScrollPercent.current = scrollPercent;
 
-      // Sync plot scrolling
-      if (!is1kMode && scrollingBox.current === 'seqBox') {
-        seqBoxSyncScroll();
-      }
+    // disable infinite scrolling when in 1k mode
+    if (!is1kMode && scrollPercent < 0.05 && !isReplacing) {
+      triggerInfiniteScroll("left");
+    } else if (!is1kMode && scrollPercent > 0.95 && !isReplacing) {
+      triggerInfiniteScroll("right");
+    }
+
+    // Sync plot scrolling
+    if (!is1kMode && scrollingBox.current === 'seqBox') {
+      // seqBoxSyncScroll(scrollLeft);
+      plotRef.current.scrollLeft = scroll_left;
     }
   };
 
   // Plot scroll handler
   const handlePlotScroll = () => {
-    if (plotRef.current) {
-      // Sync sequence box scrolling
-      if (!is1kMode && scrollingBox.current === 'plot') {
-        plotSyncScroll();
-      }
-
-      // Future: Add infinite scroll logic 
+    if (!is1kMode && scrollingBox.current === 'plot' && !isReplacing) {
+      seqBoxRef.current.scrollLeft = plotRef.current.scrollLeft;
     }
   };
 
@@ -639,7 +684,7 @@ function App() {
     if (!newIs1kMode) { // switching to not 1k mode, aka scroll mode
       // no margin to sync scroll
       relayout({ margin: { l: 0, r: 0, t: 50, b: 20 }, showlegend: false, width: newPlotWidth });
-      setTimeout(() => { seqBoxSyncScroll(); }, 10);
+      setTimeout(() => { plotRef.current.scrollLeft = scrollLeft.current; }, 10);
     } else {
       relayout({ margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 }, showlegend: showLegend, width: newPlotWidth, });
     }
@@ -661,8 +706,8 @@ function App() {
       // const inputSequence = plotFullSeq.current;
       // absolute coordinates 
       const [viewStart, viewEnd] = [boxStart.current, boxEnd.current];
-      const [startBufferStart, startBufferEnd] = [viewStart - boxSeqLen, viewEnd - boxSeqLen];
-      const [endBufferStart, endBufferEnd] = [viewStart + boxSeqLen, viewEnd + boxSeqLen];
+      const [startBufferStart, startBufferEnd] = [viewStart - boxSeqHalfLen, viewEnd - boxSeqHalfLen];
+      const [endBufferStart, endBufferEnd] = [viewStart + boxSeqHalfLen, viewEnd + boxSeqHalfLen];
       // slicing coords
       const [viewSliceStart, viewSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, viewStart - puffin_offset, viewEnd + puffin_offset);
       const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, startBufferStart - puffin_offset, startBufferEnd + puffin_offset);
