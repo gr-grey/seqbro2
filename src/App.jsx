@@ -23,17 +23,13 @@ function App() {
   const paddingLen = 1000;
   // starting seq len 3k, display middle 1k in box
   // left and right each has 1k padding
-  const initHalfLen = 1500;
+  const initHalfLen = 2000;
 
   const fullStart = useRef(null); const fullEnd = useRef(null);
   const boxStart = useRef(null); const boxEnd = useRef(null);
   const fullSeq = useRef(null);
   const [boxSeq, setBoxSeq] = useState("");
 
-  // inference
-  const plotFullSeq = useRef(null);
-  // puffin inference lose 325 from start and end
-  const puffin_offset = 325;
 
   const seqBoxRef = useRef(null);
   // width of the full seq in seqbox, like 9000px
@@ -64,6 +60,20 @@ function App() {
 
   // toggle 1k full view or local sync view
   const [is1kMode, setIs1kMode] = useState(false);
+
+  // inference
+  const plotFullSeq = useRef(null);
+  // puffin inference lose 325 from start and end
+  const puffin_offset = 325;
+  // plotly plot part
+  const [plotData, setPlotData] = useState(null);
+  const [plotLayout, setPlotLayout] = useState(null);
+  const plotRef = useRef(null);
+  // start and end are buffers, save 1k(seq len) plot data
+  // up and lower than the current location
+  const plotDataStartBuffer = useRef([]);
+  const plotDataView = useRef([]);
+  const plotDataEndBuffer = useRef([]);
 
   // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
   const range = (start, stop, step = 1) =>
@@ -104,6 +114,16 @@ function App() {
     }
   };
 
+  // get indices for slicing the fullseq and get substring
+  // with genomic coordinates, with strand consideration
+  const getSliceIndicesFromCoords = (fullStart, fullEnd, subStart, subEnd) => {
+    if (strand === '+') {
+      return [subStart - fullStart, subEnd - fullStart];
+    } else {
+      return [fullEnd - subEnd, fullEnd - subStart];
+    }
+  };
+
   // load initial sequence
   useEffect(() => {
     const init = async () => {
@@ -121,7 +141,10 @@ function App() {
       boxEnd.current = box_end;
       // update sequence
       fullSeq.current = seq;
-      setBoxSeq(seq.slice(box_start - full_start, box_end - full_start));
+      // at init, because things are symetrical, this works for both + and - strand
+      const [slice_start, slice_end] = getSliceIndicesFromCoords(full_start, full_end, box_start, box_end);
+      // console.log({sliceStart: slice_start, sliceEnd:slice_end});
+      setBoxSeq(seq.slice(slice_start, slice_end));
       // test: plot seq halflen = 500 + 325, plus strand only
       const plotStart = coordinate - boxSeqHalfLen - puffin_offset;
       const plotEnd = coordinate + boxSeqHalfLen + puffin_offset;
@@ -144,7 +167,7 @@ function App() {
       const view_w = seqBoxRef.current.clientWidth;
       const lmax = full_w - view_w;
       // seq len = 1000, even num, need to shift right by half a character
-      const middlePoint = 0.500 +  1 / boxSeqLen / 2;
+      const middlePoint = 0.500 + 1 / boxSeqLen / 2;
       seqBoxRef.current.scrollLeft = lmax * middlePoint;
       // init scrollLeft value and scrollBox
       scrollLeft.current = lmax * middlePoint;
@@ -161,7 +184,7 @@ function App() {
 
       // init view coords on tick/ ruler
       setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i)));
-      
+
       // console.log({bstart: boxStart.current, boxSeqLen: boxSeqLen, viewSeqLen: viewLen });
     }
   }, [seqInited]);
@@ -289,7 +312,7 @@ function App() {
   const handleMouseEnterSeqBox = () => {
     scrollingBox.current = 'seqBox';
   };
-  
+
   const handleMouseEnterPlot = () => {
     scrollingBox.current = 'plot';
   };
@@ -318,7 +341,7 @@ function App() {
     const leftEnd = full_w - box_w;
     const scrollPercent = elem.scrollLeft / leftEnd;
 
-    setViewCoords(coordTicks.map(i =>  getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i)));
+    setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i)));
 
     // disable infinite scrolling when in 1k mode
     if (!is1kMode && scrollPercent < 0.05 && !isReplacing) {
@@ -368,7 +391,7 @@ function App() {
 
   // Plot scroll handler
   const handlePlotScroll = () => {
-    if ( plotRef.current) {
+    if (plotRef.current) {
       // Sync sequence box scrolling
       if (!is1kMode && scrollingBox.current === 'plot') {
         plotSyncScroll();
@@ -432,10 +455,6 @@ function App() {
     return "transparent"; // Default background
   };
 
-  // onnx session to run puffin inference
-  const [plotData, setPlotData] = useState(null);
-  const [plotLayout, setPlotLayout] = useState(null);
-  const plotRef = useRef(null);
 
   // helper function to encode sequence
   const encodeSequence = (inputSequence) => {
@@ -455,7 +474,7 @@ function App() {
   // global onnx inference session for puffin
   const puffinSession = useRef(null);
   const [isPuffinSessionReady, setIsPuffinSessionReady] = useState(false);
-  const modelPath  = '/testnet0.onnx';
+  const modelPath = '/testnet0.onnx';
 
   const runInference = async (inputSequence) => {
     try {
@@ -504,7 +523,8 @@ function App() {
     borderwidth: 1,
   };
 
-  const getPlotData = (results) => {
+  // start coord < end coord, same for + and -
+  const getPlotData = (results, start, end) => {
 
     // Extract outputs
     const motifs = Array.from({ length: 18 }, (_, i) =>
@@ -529,11 +549,7 @@ function App() {
       '#ff930e', '#b663fa', '#AB63FA', '#17BECF', '#ffc6ba', '#CFCFCF'];
 
     const traces = [];
-    const xs =
-      strand === '+'
-        ? range(boxStart.current, boxEnd.current)    // Normal order for '+' strand
-        : range(boxEnd.current, boxStart.current, -1); // Reverse coordinates for '-' strand
-
+    const xs = strand === '+' ? range(start, end) : range(end, start, -1); // Reverse coordinates for '-' strand
 
     // Add Motif Activations to Traces
     motifacts.forEach((data, index) => {
@@ -638,14 +654,30 @@ function App() {
     relayout({ showlegend: newShowLegend });
   };
 
-  // for now only run once at init
+  // reruns everytime initSeq changes, which happens when genome form is updated
+  // and fullSeq and everything gets reset
   useEffect(() => {
     const initPlot = async () => {
-      const inputSequence = plotFullSeq.current;
-      const outputs = await runInference(inputSequence);
-      console.log('init plot');
+      // const inputSequence = plotFullSeq.current;
+      // absolute coordinates 
+      const [viewStart, viewEnd] = [boxStart.current, boxEnd.current];
+      const [startBufferStart, startBufferEnd] = [viewStart - boxSeqLen, viewEnd - boxSeqLen];
+      const [endBufferStart, endBufferEnd] = [viewStart + boxSeqLen, viewEnd + boxSeqLen];
+      // slicing coords
+      const [viewSliceStart, viewSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, viewStart - puffin_offset, viewEnd + puffin_offset);
+      const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, startBufferStart - puffin_offset, startBufferEnd + puffin_offset);
+      const [endSliceStart, endSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, endBufferStart - puffin_offset, endBufferEnd + puffin_offset);
+
+      const viewSeq = fullSeq.current.slice(viewSliceStart, viewSliceEnd);
+      const startBufferSeq = fullSeq.current.slice(startSliceStart, startSliceEnd);
+      const endBufferSeq = fullSeq.current.slice(endSliceStart, endSliceEnd);
+
+      const outputs = await runInference(viewSeq);
+      console.log('init plot, run infernce for view sequence and left righ buffer');
       if (outputs) {
-        setPlotData(getPlotData(outputs));
+        const plotData = getPlotData(outputs, boxStart.current, boxEnd.current);
+        setPlotData(plotData);
+        plotDataView.current = plotData;
         const xaxisLayout = { tickformat: 'd', autorange: strand === '-' ? 'reversed' : true, };
         setPlotLayout({
           // title: 'Puffin Model Plot',
@@ -664,9 +696,15 @@ function App() {
         });
       }
 
+      const startBufferOutputs = await runInference(startBufferSeq);
+      const endBufferOutputs = await runInference(endBufferSeq);
+      // set plot data for start and end buffers
+      plotDataStartBuffer.current = getPlotData(startBufferOutputs, startBufferStart, startBufferEnd);
+      plotDataEndBuffer.current = getPlotData(endBufferOutputs, endBufferStart, endBufferEnd);
+
       if (!is1kMode && plotRef.current && scrollLeftMax.current) {
         // manually scroll to halfway
-        const middlePoint = 0.500 +  1 / boxSeqLen / 2;
+        const middlePoint = 0.500 + 1 / boxSeqLen / 2;
         setTimeout(() => { plotRef.current.scrollLeft = middlePoint * scrollLeftMax.current; }, 10);
       }
     };
@@ -679,7 +717,7 @@ function App() {
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotData };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -731,7 +769,7 @@ function App() {
             </div>
 
             {/* Ruler */}
-            <div className="relative pt-3 pb-3 bg-white border-b border-gray-800">
+            {viewCoords.length && <div className="relative pt-3 pb-3 bg-white border-b border-gray-800">
 
               <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
                 style={{ left: "0%", transform: "translateX(0%)" }}
@@ -756,7 +794,7 @@ function App() {
                   style={{ left: `${pos}%` }}
                 ></div>
               ))}
-            </div>
+            </div>}
 
             <div
               className="bg-gray-50 pt-1 pb-2 border border-gray-300 overflow-x-auto font-mono"

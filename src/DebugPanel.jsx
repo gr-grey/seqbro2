@@ -1,12 +1,17 @@
 import React from "react";
 
-const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords}) => {
+const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotData}) => {
 
     return (
         <>
             <div className="border-t border-gray-200 mt-2">
                 <h1>Debug:</h1>
                 <ul className="space-y-2 text-sm">
+                    <li><span> --------Plotly plot tracking---------</span></li>
+                    {/* <li><span> plot full seq len </span> {`${plotFullSeq ? plotFullSeq.current.length : 0}`}</li> */}
+                    {/* <li><span> plot data length </span> {`${plotData.length}`}</li> */}
+                    {/* <li><span> plot data[0] y len </span> {`${plotData[0].y.length}`}</li> */}
+
                     <li><span> --------SeqBox scrolling tracking---------</span></li>
                     <li><span> view coords: </span> {`${viewCoords}`}</li>
                     <li><span> 1k mode: </span> {`${is1kMode}`}</li>
