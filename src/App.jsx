@@ -44,8 +44,9 @@ function App() {
   const scrollLeftMax = useRef(null);
   // of the 1000 char in seqBox, how many are in view box
   const viewSeqLen = useRef(null);
-  // coords at left end of ruler
-  const [viewStart, setViewStart] = useState(null);
+  // coords at left, middle and right of sequence box viewing width
+  const [viewCoords, setViewCoords] = useState([]);
+  const coordTicks = [0.0, 0.5, 1.0];
 
   // scrolling and syncing vars
   // track whether we are scrolling in seqbox or in plotbox
@@ -80,21 +81,12 @@ function App() {
     }
   };
 
-  // calculate coord at the left of the ruler, count for strand
-  const getViewStartCoord = (start, scrollChar, clientChar, scrollPercent) => {
-    if (strand === '-') {
-      return start + scrollChar - (scrollChar - clientChar) * scrollPercent
+  // coords of viewing part of seqbox, left -> right: tick percent 0 -> 1
+  const getViewCoords = (start, scrollChar, clientChar, scrollPercent, tickPercent) => {
+    if (strand === '+') {
+      return Math.floor(start + (scrollChar - clientChar) * scrollPercent + tickPercent * clientChar);
     } else {
-      return start + (scrollChar - clientChar) * scrollPercent
-    }
-  };
-
-  // get ruler maker/ tick coordinates, count for strand
-  const getRulerTickCoord = (percent) => {
-    if (strand === '-') {
-      return Math.floor(viewStart - percent * viewSeqLen.current);
-    } else {
-      return Math.floor(viewStart + percent * viewSeqLen.current);
+      return Math.ceil(start + scrollChar - (scrollChar - clientChar) * scrollPercent - tickPercent * clientChar);
     }
   };
 
@@ -167,8 +159,9 @@ function App() {
       scrollLeftMax.current = lmax;
       syncScrollPercent.current = middlePoint;
 
-      // init view start coord
-      setViewStart(getViewStartCoord(boxStart.current, boxSeqLen, viewLen, middlePoint));
+      // init view coords on tick/ ruler
+      setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i)));
+      
       // console.log({bstart: boxStart.current, boxSeqLen: boxSeqLen, viewSeqLen: viewLen });
     }
   }, [seqInited]);
@@ -184,18 +177,15 @@ function App() {
       const scrollPercent = scroll_left / leftEnd;
 
       const viewLen = boxSeqLen / full_w * box_w;
-      // coord of first char in view port
-      // this usually doesn't change but just in case
-      const newViewStart = getViewStartCoord(boxStart.current, boxSeqLen, viewLen, scrollPercent);
-      setViewStart(newViewStart);
+      // coords on tick/ ruler in view port
+      const viewCoords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, scrollPercent, i));
+      setViewCoords(viewCoords);
 
       // update varaibles
       boxWidth.current = box_w;
       viewSeqLen.current = viewLen;
       syncScrollPercent.current = scrollPercent;
       scrollLeft.current = scroll_left;
-
-      updateDallianceCoord(browserRef, newViewStart, viewLen);
 
       // update plot widths for 1k view
       if (is1kMode) {
@@ -328,13 +318,7 @@ function App() {
     const leftEnd = full_w - box_w;
     const scrollPercent = elem.scrollLeft / leftEnd;
 
-    const newViewStart = getViewStartCoord(
-      boxStart.current,
-      boxSeqLen,
-      viewSeqLen.current,
-      scrollPercent
-    );
-    setViewStart(newViewStart);
+    setViewCoords(coordTicks.map(i =>  getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i)));
 
     // disable infinite scrolling when in 1k mode
     if (!is1kMode && scrollPercent < 0.05 && !isReplacing) {
@@ -453,30 +437,40 @@ function App() {
   const [plotLayout, setPlotLayout] = useState(null);
   const plotRef = useRef(null);
 
-  const runInference = async (inputSequence, modelPath) => {
+  // helper function to encode sequence
+  const encodeSequence = (inputSequence) => {
+    const seqEncoded = Array.from(inputSequence).map((char) => {
+      switch (char) {
+        case 'A': return [1, 0, 0, 0];
+        case 'C': return [0, 1, 0, 0];
+        case 'G': return [0, 0, 1, 0];
+        case 'T': return [0, 0, 0, 1];
+        default: return [0, 0, 0, 0];
+      }
+    });
+    // transpose seqlen by 4 to 4 by seq_len
+    return seqEncoded[0].map((_, colIndex) => seqEncoded.map(row => row[colIndex]));
+  };
+
+  // global onnx inference session for puffin
+  const puffinSession = useRef(null);
+  const [isPuffinSessionReady, setIsPuffinSessionReady] = useState(false);
+  const modelPath  = '/testnet0.onnx';
+
+  const runInference = async (inputSequence) => {
     try {
-      const session = await window.ort.InferenceSession.create(modelPath);
+      // const session = await window.ort.InferenceSession.create(modelPath);
+      if (!puffinSession.current) {
+        throw new Error('Model session is not initialized.');
+      }
 
       // Encode the sequence
-      const seqEncoded = Array.from(inputSequence).map((char) => {
-        switch (char) {
-          case 'A': return [1, 0, 0, 0];
-          case 'C': return [0, 1, 0, 0];
-          case 'G': return [0, 0, 1, 0];
-          case 'T': return [0, 0, 0, 1];
-          default: return [0, 0, 0, 0];
-        }
-      });
-
-      const seqTransposed = seqEncoded[0].map((_, colIndex) =>
-        seqEncoded.map(row => row[colIndex])
-      );
-
-      const seqEncodedTensor = new ort.Tensor('float32', seqTransposed.flat(), [1, 4, inputSequence.length]);
+      const seqEncoded = encodeSequence(inputSequence);
+      const seqEncodedTensor = new ort.Tensor('float32', seqEncoded.flat(), [1, 4, inputSequence.length]);
 
       // Run inference
-      const feeds = { [session.inputNames[0]]: seqEncodedTensor };
-      const results = await session.run(feeds);
+      const feeds = { [puffinSession.current.inputNames[0]]: seqEncodedTensor };
+      const results = await puffinSession.current.run(feeds);
 
       return results;
     } catch (error) {
@@ -484,6 +478,21 @@ function App() {
       return null;
     }
   };
+
+  // init puffin session at the beginning
+  useEffect(() => {
+    const initializeModel = async () => {
+      try {
+        puffinSession.current = await window.ort.InferenceSession.create(modelPath);
+        console.log('Model initialized');
+        setIsPuffinSessionReady(true);
+      } catch (error) {
+        console.error(`Error initializing model`, error);
+      }
+    };
+
+    initializeModel();
+  }, []);
 
   const plotLeftMargin = 10;
   const plotLegendLayout = {
@@ -494,6 +503,7 @@ function App() {
     bordercolor: 'rgba(0, 0, 0, 0.1)',
     borderwidth: 1,
   };
+
   const getPlotData = (results) => {
 
     // Extract outputs
@@ -631,8 +641,8 @@ function App() {
   // for now only run once at init
   useEffect(() => {
     const initPlot = async () => {
-      const inputSequence = plotFullSeq.current; // Replace with your input sequence source
-      const outputs = await runInference(inputSequence, '/testnet0.onnx');
+      const inputSequence = plotFullSeq.current;
+      const outputs = await runInference(inputSequence);
       console.log('init plot');
       if (outputs) {
         setPlotData(getPlotData(outputs));
@@ -650,6 +660,7 @@ function App() {
           grid: { rows: 4, columns: 1, pattern: 'independent' },
           margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 },
           legend: plotLegendLayout,
+          showlegend: showLegend,
         });
       }
 
@@ -659,16 +670,16 @@ function App() {
         setTimeout(() => { plotRef.current.scrollLeft = middlePoint * scrollLeftMax.current; }, 10);
       }
     };
-
-    if (plotFullSeq.current && seqInited) {
+    // this updates plot whenever sequence gets reinit via form
+    if (plotFullSeq.current && seqInited && isPuffinSessionReady) {
       initPlot();
     }
-  }, [seqInited]);
+  }, [seqInited, isPuffinSessionReady]);
 
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode, scrollingBox, scrollLeft, scrollLeftMax };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -676,19 +687,16 @@ function App() {
   const viewerRef = useRef(null);
   const browserRef = useRef(null);
 
-  const updateDallianceCoord = (browserRef, viewStart, viewLen) => {
-    if (strand === '+') {
-      browserRef.current.setLocation(chromosome, Math.floor(viewStart), Math.floor(viewStart + viewLen));
-    } else { // minus strand
-      browserRef.current.setLocation(chromosome, Math.floor(viewStart - viewLen), Math.floor(viewStart));
-    }
-  };
-  // sync dalliance genome browser as seq view box start coord changes
+  // sync dalliance genome browser as seq view box start, mid and end coord changes
   useEffect(() => {
-    if (browserRef.current && viewStart) {
-      updateDallianceCoord(browserRef, viewStart, viewSeqLen.current);
+    if (browserRef.current && viewCoords.length) {
+      if (strand === '+') {
+        browserRef.current.setLocation(chromosome, viewCoords[0], viewCoords[2]);
+      } else { // minus strand
+        browserRef.current.setLocation(chromosome, viewCoords[2], viewCoords[0]);
+      }
     }
-  }, [viewStart]);
+  }, [viewCoords]);
 
   return (
     <>
@@ -728,19 +736,19 @@ function App() {
               <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
                 style={{ left: "0%", transform: "translateX(0%)" }}
               >
-                {Math.floor(viewStart)}
+                {Math.floor(viewCoords[0])}
               </div>
 
               <div className="absolute pt-1 top-0 transform -translate-x-1/2 text-xs text-blue-600"
                 style={{ left: "50%" }}
               >
-                {getRulerTickCoord(0.5)}
+                {Math.floor(viewCoords[1])}
               </div>
 
               <div className="absolute pt-1 top-0 left-1/2 text-xs text-blue-600"
                 style={{ left: "100%", transform: "translateX(-100%)" }}
               >
-                {getRulerTickCoord(1.0)}
+                {Math.floor(viewCoords[2])}
               </div>
 
               {ticks.map((pos, index) => (

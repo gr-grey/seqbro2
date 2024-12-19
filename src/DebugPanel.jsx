@@ -1,6 +1,6 @@
 import React from "react";
 
-const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, viewStart, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode, scrollingBox, scrollLeft, scrollLeftMax}) => {
+const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords}) => {
 
     return (
         <>
@@ -8,6 +8,7 @@ const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, f
                 <h1>Debug:</h1>
                 <ul className="space-y-2 text-sm">
                     <li><span> --------SeqBox scrolling tracking---------</span></li>
+                    <li><span> view coords: </span> {`${viewCoords}`}</li>
                     <li><span> 1k mode: </span> {`${is1kMode}`}</li>
                     <li><span> scrollingBox </span> {`${scrollingBox.current}`}</li>
                     <li><span> scrollLeft </span> {`${scrollLeft.current}`}</li>
@@ -26,7 +27,6 @@ const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, f
                         <span> display seq length:</span> {boxSeq.length};
                         <span> plot seq length:</span> {plotFullSeq.current ? plotFullSeq.current.length : 0};
                     </li>
-                    <li><span> view start coord:</span> {viewStart}</li>
 
                     <li><span> --------Genome forms---------</span></li>
                     <li><span> Genome:</span> {genome}</li>
