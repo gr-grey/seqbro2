@@ -1,0 +1,487 @@
+{
+    "modelPath": "/puffinPantomCage.onnx",
+    "puffinOffset": 325,
+    "grid": {
+        "rows": 4,
+        "columns": 1,
+        "pattern": "independent"
+    },
+    "traces": [
+        {
+            "result_key": "motifact1",
+            "mode": "lines",
+            "name": "YY1+",
+            "legendgroup": "0",
+            "line": {
+                "color": "#1F77B4",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact2",
+            "mode": "lines",
+            "name": "TATA+",
+            "legendgroup": "1",
+            "line": {
+                "color": "#E41A1C",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact3",
+            "mode": "lines",
+            "name": "U1 snRNP+",
+            "legendgroup": "2",
+            "line": {
+                "color": "#9F9F9F",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact4",
+            "mode": "lines",
+            "name": "YY1-",
+            "legendgroup": "3",
+            "line": {
+                "color": "#c2d5e8",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact5",
+            "mode": "lines",
+            "name": "ETS+",
+            "legendgroup": "4",
+            "line": {
+                "color": "#19d3f3",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact6",
+            "mode": "lines",
+            "name": "NFY+",
+            "legendgroup": "5",
+            "line": {
+                "color": "#00CC96",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact7",
+            "mode": "lines",
+            "name": "ETS-",
+            "legendgroup": "6",
+            "line": {
+                "color": "#19e4f3",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact8",
+            "mode": "lines",
+            "name": "NFY-",
+            "legendgroup": "7",
+            "line": {
+                "color": "#00cc5f",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact9",
+            "mode": "lines",
+            "name": "CREB+",
+            "legendgroup": "8",
+            "line": {
+                "color": "#FF6692",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact10",
+            "mode": "lines",
+            "name": "CREB-",
+            "legendgroup": "9",
+            "line": {
+                "color": "#ff66c2",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact11",
+            "mode": "lines",
+            "name": "ZNF143+",
+            "legendgroup": "10",
+            "line": {
+                "color": "#17a4cf",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact12",
+            "mode": "lines",
+            "name": "SP+",
+            "legendgroup": "11",
+            "line": {
+                "color": "#FF7F0E",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact13",
+            "mode": "lines",
+            "name": "SP-",
+            "legendgroup": "12",
+            "line": {
+                "color": "#ff930e",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact14",
+            "mode": "lines",
+            "name": "NRF1-",
+            "legendgroup": "13",
+            "line": {
+                "color": "#b663fa",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact15",
+            "mode": "lines",
+            "name": "NRF1+",
+            "legendgroup": "14",
+            "line": {
+                "color": "#AB63FA",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact16",
+            "mode": "lines",
+            "name": "ZNF143-",
+            "legendgroup": "15",
+            "line": {
+                "color": "#17BECF",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact17",
+            "mode": "lines",
+            "name": "TATA-",
+            "legendgroup": "16",
+            "line": {
+                "color": "#ffc6ba",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motifact18",
+            "mode": "lines",
+            "name": "U1 snRNP-",
+            "legendgroup": "17",
+            "line": {
+                "color": "#CFCFCF",
+                "width": 1
+            },
+            "xaxis": "x1",
+            "yaxis": "y1"
+        },
+        {
+            "result_key": "motif1",
+            "mode": "lines",
+            "name": "YY1+",
+            "line": {
+                "color": "#1F77B4",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif2",
+            "mode": "lines",
+            "name": "TATA+",
+            "line": {
+                "color": "#E41A1C",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif3",
+            "mode": "lines",
+            "name": "U1 snRNP+",
+            "line": {
+                "color": "#9F9F9F",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif4",
+            "mode": "lines",
+            "name": "YY1-",
+            "line": {
+                "color": "#c2d5e8",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif5",
+            "mode": "lines",
+            "name": "ETS+",
+            "line": {
+                "color": "#19d3f3",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif6",
+            "mode": "lines",
+            "name": "NFY+",
+            "line": {
+                "color": "#00CC96",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif7",
+            "mode": "lines",
+            "name": "ETS-",
+            "line": {
+                "color": "#19e4f3",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif8",
+            "mode": "lines",
+            "name": "NFY-",
+            "line": {
+                "color": "#00cc5f",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif9",
+            "mode": "lines",
+            "name": "CREB+",
+            "line": {
+                "color": "#FF6692",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif10",
+            "mode": "lines",
+            "name": "CREB-",
+            "line": {
+                "color": "#ff66c2",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif11",
+            "mode": "lines",
+            "name": "ZNF143+",
+            "line": {
+                "color": "#17a4cf",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif12",
+            "mode": "lines",
+            "name": "SP+",
+            "line": {
+                "color": "#FF7F0E",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif13",
+            "mode": "lines",
+            "name": "SP-",
+            "line": {
+                "color": "#ff930e",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif14",
+            "mode": "lines",
+            "name": "NRF1-",
+            "line": {
+                "color": "#b663fa",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif15",
+            "mode": "lines",
+            "name": "NRF1+",
+            "line": {
+                "color": "#AB63FA",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif16",
+            "mode": "lines",
+            "name": "ZNF143-",
+            "line": {
+                "color": "#17BECF",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif17",
+            "mode": "lines",
+            "name": "TATA-",
+            "line": {
+                "color": "#ffc6ba",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "motif18",
+            "mode": "lines",
+            "name": "U1 snRNP-",
+            "line": {
+                "color": "#CFCFCF",
+                "width": 1
+            },
+            "showlegend": "false",
+            "xaxis": "x2",
+            "yaxis": "y2"
+        },
+        {
+            "result_key": "effects_motif",
+            "mode": "lines",
+            "name": "motif effects",
+            "line": {
+                "color": "#445B88",
+                "width": 1
+            },
+            "xaxis": "x3",
+            "yaxis": "y3"
+        },
+        {
+            "result_key": "effects_inr",
+            "mode": "lines",
+            "name": "inr effects",
+            "line": {
+                "color": "#445B88",
+                "width": 1
+            },
+            "xaxis": "x3",
+            "yaxis": "y3"
+        },
+        {
+            "result_key": "effects_sim",
+            "mode": "lines",
+            "name": "sim effects",
+            "line": {
+                "color": "#445B88",
+                "width": 1
+            },
+            "xaxis": "x3",
+            "yaxis": "y3"
+        },
+        {
+            "result_key": "y_pred",
+            "mode": "lines",
+            "name": "y_pred",
+            "line": {
+                "color": "#143066",
+                "width": 1
+            },
+            "xaxis": "x4",
+            "yaxis": "y4"
+        }
+    ]
+}

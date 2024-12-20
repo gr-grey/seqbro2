@@ -7,15 +7,17 @@ import NavBar from './NavBar';
 import GenomeForm from './GenomeForm';
 import DallianceViewer from './DallianceViewer';
 import Plot from 'react-plotly.js';
+// import plotConfig from './assets/plotConfig.json';
 
 function App() {
   // get sequence
   const [genome, setGenome] = useState("hg38");
   const [chromosome, setChromosome] = useState("chr7");
   const [coordinate, setCoordinate] = useState(5530600);
-  const [strand, setStrand] = useState('+');
+  const [strand, setStrand] = useState('-');
   const [gene, setGene] = useState('ACTB');
 
+  // constants
   // scrollable content sequence len: 1000 characters
   const boxSeqHalfLen = 500;
   const boxSeqLen = 2 * boxSeqHalfLen;
@@ -24,6 +26,43 @@ function App() {
   // starting seq len 3k, display middle 1k in box
   // left and right each has 1k padding
   const initHalfLen = 2000;
+  const coordTicks = [0.0, 0.5, 1.0];
+  const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
+
+  // plot configure from puffin.config.json in public folder
+  // const [config, setConfig] = useState(null);
+  const puffinConfig = useRef(null);
+  // const modelPath = useRef(null);
+  // const puffinConfig.current.puffinOffset = useRef(null);
+  // const traces = useRef(null);
+
+  useEffect(() => {
+    const loadModelAndConfig = async () => {
+      try {
+        const response = await fetch('/puffin.config.json');
+        const data = await response.json();
+        puffinConfig.current = data;
+        // init puffin session at the beginning
+        puffinSession.current = await window.ort.InferenceSession.create(data.modelPath);
+        setIsPuffinSessionReady(true);
+        console.log('Model and config loaded from puffin.config.json.');
+
+      } catch (error) {
+        console.error('Error loading configuration and initing model', error);
+      }
+    };
+    loadModelAndConfig();
+  }, []);
+
+  const plotLeftMargin = 10;
+  const plotLegendLayout = {
+    y: 1.0, x: 1.0,
+    xanchor: 'right', yanchor: 'top',
+    scroll: true, // Enable scrolling for the legend
+    bgcolor: 'rgba(255, 255, 255, 0.6)',
+    bordercolor: 'rgba(0, 0, 0, 0.1)',
+    borderwidth: 1,
+  };
 
   const fullStart = useRef(null); const fullEnd = useRef(null);
   const boxStart = useRef(null); const boxEnd = useRef(null);
@@ -41,7 +80,6 @@ function App() {
   const viewSeqLen = useRef(null);
   // coords at left, middle and right of sequence box viewing width
   const [viewCoords, setViewCoords] = useState([]);
-  const coordTicks = [0.0, 0.5, 1.0];
 
   // scrolling and syncing vars
   // track whether we are scrolling in seqbox or in plotbox
@@ -59,10 +97,9 @@ function App() {
   // toggle 1k full view or local sync view
   const [is1kMode, setIs1kMode] = useState(false);
 
-  // inference
-  const plotFullSeq = useRef(null);
-  // puffin inference lose 325 from start and end
-  const puffin_offset = 325;
+  // global onnx inference session for puffin
+  const puffinSession = useRef(null);
+  const [isPuffinSessionReady, setIsPuffinSessionReady] = useState(false);
   // plotly plot part
   const [plotData, setPlotData] = useState(null);
   const [plotLayout, setPlotLayout] = useState(null);
@@ -72,6 +109,13 @@ function App() {
   const plotDataStartBuffer = useRef([]);
   const plotDataView = useRef([]);
   const plotDataEndBuffer = useRef([]);
+
+  // Dalliance genome viewer
+  const viewerRef = useRef(null);
+  const browserRef = useRef(null);
+
+  // left < and right > buttons with continuous scrolling
+  const [scrollInterval, setScrollInterval] = useState(null);
 
   // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
   const range = (start, stop, step = 1) =>
@@ -236,7 +280,6 @@ function App() {
   }, []);
 
   // left < and right > buttons with continuous scrolling
-  const [scrollInterval, setScrollInterval] = useState(null);
   const startScrolling = (direction) => {
     if (!scrollInterval) {
       const interval = setInterval(() => {
@@ -283,7 +326,7 @@ function App() {
       const [start, end] = [newBoxStart - boxSeqHalfLen, newBoxEnd - boxSeqHalfLen];
       const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
       // run inference and get data
-      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffin_offset, sliceEnd + puffin_offset));
+      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffinConfig.current.puffinOffset, sliceEnd + puffinConfig.current.puffinOffset));
       newStartBuffer = getPlotData(outputs, start, end);
       newViewData = plotDataStartBuffer.current;
       newEndBuffer = plotDataView.current;
@@ -293,7 +336,7 @@ function App() {
       const [start, end] = [newBoxStart + boxSeqHalfLen, newBoxEnd + boxSeqHalfLen];
       const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
       // run inference and get data
-      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffin_offset, sliceEnd + puffin_offset));
+      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffinConfig.current.puffinOffset, sliceEnd + puffinConfig.current.puffinOffset));
       newStartBuffer = plotDataView.current;
       newViewData = plotDataEndBuffer.current;
       newEndBuffer = getPlotData(outputs, start, end);
@@ -427,14 +470,8 @@ function App() {
     return seqEncoded[0].map((_, colIndex) => seqEncoded.map(row => row[colIndex]));
   };
 
-  // global onnx inference session for puffin
-  const puffinSession = useRef(null);
-  const [isPuffinSessionReady, setIsPuffinSessionReady] = useState(false);
-  const modelPath = '/testnet0.onnx';
-
   const runInference = async (inputSequence) => {
     try {
-      // const session = await window.ort.InferenceSession.create(modelPath);
       if (!puffinSession.current) {
         throw new Error('Model session is not initialized.');
       }
@@ -454,127 +491,26 @@ function App() {
     }
   };
 
-  // init puffin session at the beginning
-  useEffect(() => {
-    const initializeModel = async () => {
-      try {
-        puffinSession.current = await window.ort.InferenceSession.create(modelPath);
-        console.log('Model initialized');
-        setIsPuffinSessionReady(true);
-      } catch (error) {
-        console.error(`Error initializing model`, error);
-      }
-    };
-
-    initializeModel();
-  }, []);
-
-  const plotLeftMargin = 10;
-  const plotLegendLayout = {
-    y: 1.0, x: 1.0,
-    xanchor: 'right', yanchor: 'top',
-    scroll: true, // Enable scrolling for the legend
-    bgcolor: 'rgba(255, 255, 255, 0.6)',
-    bordercolor: 'rgba(0, 0, 0, 0.1)',
-    borderwidth: 1,
-  };
-
   // start coord < end coord, same for + and -
   const getPlotData = (results, start, end) => {
 
-    // Extract outputs
-    const motifs = Array.from({ length: 18 }, (_, i) =>
-      results[`motif${i + 1}`].data
-    );
-    const motifacts = Array.from({ length: 18 }, (_, i) =>
-      results[`motifact${i + 1}`].data
-    );
-    const effects_motif = results["effects_motif"].data;
-    // const effects_total = results["effects_total"].data;
-    const effects_inr = results["effects_inr"].data;
-    const effects_sim = results["effects_sim"].data;
-
-    const y_pred = results["y_pred"].data;
-    // Plot data
-    const tssList = ['YY1+', 'TATA+', 'U1 snRNP+', 'YY1-', 'ETS+', 'NFY+', 'ETS-', 'NFY-',
-      'CREB+', 'CREB-', 'ZNF143+', 'SP+', 'SP-', 'NRF1-', 'NRF1+',
-      'ZNF143-', 'TATA-', 'U1 snRNP-'];
-
-    const colorArr = ['#1F77B4', '#E41A1C', '#9F9F9F', '#c2d5e8', '#19d3f3', '#00CC96',
-      '#19e4f3', '#00cc5f', '#FF6692', '#ff66c2', '#17a4cf', '#FF7F0E',
-      '#ff930e', '#b663fa', '#AB63FA', '#17BECF', '#ffc6ba', '#CFCFCF'];
-
-    const traces = [];
     const xs = strand === '+' ? range(start, end) : range(end, start, -1); // Reverse coordinates for '-' strand
+    // Dynamically create traces based on YAML configuration
+    const test_traces = puffinConfig.current.traces.map((traceConfig) => {
+      const yData = results[traceConfig.result_key]?.data; // Extract data using result_key
+      if (!yData) return null; // Skip if data is unavailable
 
-    // Add Motif Activations to Traces
-    motifacts.forEach((data, index) => {
-      traces.push({
+      return {
         x: xs,
-        y: data,
-        mode: 'lines',
-        name: tssList[index],
-        line: { color: colorArr[index], width: 1 },
-        legendgroup: index.toString(),
-        xaxis: 'x1',
-        yaxis: 'y1',
-      });
+        y: yData,
+        mode: traceConfig.mode,
+        name: traceConfig.name,
+        line: traceConfig.line,
+        xaxis: traceConfig.xaxis,
+        yaxis: traceConfig.yaxis,
+      };
     });
-
-    // Add Motif Effect to Traces
-    motifs.forEach((data, index) => {
-      traces.push({
-        x: xs,
-        y: data,
-        mode: 'lines',
-        name: tssList[index],
-        line: { color: colorArr[index], width: 1 },
-        showlegend: false,
-        xaxis: 'x2',
-        yaxis: 'y2',
-      });
-    });
-
-    // Add Effects to Traces
-    traces.push({
-      x: xs,
-      y: effects_motif,
-      mode: 'lines',
-      name: 'motif_effects',
-      line: { color: '#445B88', width: 1 },
-      xaxis: 'x3',
-      yaxis: 'y3',
-    });
-    traces.push({
-      x: xs,
-      y: effects_inr,
-      mode: 'lines',
-      name: 'inr_effects',
-      line: { color: '#445B88', width: 1 },
-      xaxis: 'x3',
-      yaxis: 'y3',
-    });
-    traces.push({
-      x: xs,
-      y: effects_sim,
-      mode: 'lines',
-      name: 'sim_effects',
-      line: { color: '#445B88', width: 1 },
-      xaxis: 'x3',
-      yaxis: 'y3',
-    });
-
-    traces.push({
-      x: xs,
-      y: y_pred,
-      mode: 'lines',
-      name: 'y_pred',
-      line: { color: '#143066', width: 1 },
-      xaxis: 'x4',
-      yaxis: 'y4',
-    });
-
-    return traces;
+    return test_traces;
   }
 
   const relayout = (updates) => {
@@ -616,9 +552,9 @@ function App() {
       const [startBufferStart, startBufferEnd] = [viewStart - boxSeqHalfLen, viewEnd - boxSeqHalfLen];
       const [endBufferStart, endBufferEnd] = [viewStart + boxSeqHalfLen, viewEnd + boxSeqHalfLen];
       // slicing coords
-      const [viewSliceStart, viewSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, viewStart - puffin_offset, viewEnd + puffin_offset);
-      const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, startBufferStart - puffin_offset, startBufferEnd + puffin_offset);
-      const [endSliceStart, endSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, endBufferStart - puffin_offset, endBufferEnd + puffin_offset);
+      const [viewSliceStart, viewSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, viewStart - puffinConfig.current.puffinOffset, viewEnd + puffinConfig.current.puffinOffset);
+      const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, startBufferStart - puffinConfig.current.puffinOffset, startBufferEnd + puffinConfig.current.puffinOffset);
+      const [endSliceStart, endSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, endBufferStart - puffinConfig.current.puffinOffset, endBufferEnd + puffinConfig.current.puffinOffset);
 
       const viewSeq = fullSeq.current.slice(viewSliceStart, viewSliceEnd);
       const startBufferSeq = fullSeq.current.slice(startSliceStart, startSliceEnd);
@@ -631,17 +567,18 @@ function App() {
         setPlotData(plotData);
         plotDataView.current = plotData;
         const xaxisLayout = { tickformat: 'd', autorange: strand === '-' ? 'reversed' : true, };
+        const totalPlots = puffinConfig.current.grid.rows * puffinConfig.current.grid.columns;
+        const axisLayout = {};
+        for (let i = 0; i < totalPlots; i++) {
+            axisLayout[`xaxis${i + 1}`] = xaxisLayout;
+        }
         setPlotLayout({
           // title: 'Puffin Model Plot',
-          xaxis: xaxisLayout,
-          xaxis2: xaxisLayout,
-          xaxis3: xaxisLayout,
-          xaxis4: xaxisLayout,
+          ...axisLayout,
           height: 500,
-          // width: boxSeqFullWidth.current,
+          grid: puffinConfig.current.grid,
           width: is1kMode ? boxWidth.current : boxSeqFullWidth.current,
           template: 'plotly_white',
-          grid: { rows: 4, columns: 1, pattern: 'independent' },
           margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 },
           legend: plotLegendLayout,
           showlegend: showLegend,
@@ -662,20 +599,16 @@ function App() {
     };
     // this updates plot whenever sequence gets reinit via form
     if (seqInited && isPuffinSessionReady) {
+
       initPlot();
     }
   }, [seqInited, isPuffinSessionReady]);
 
-  const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, plotFullSeq, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotData };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotData };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
-
-  // Dalliance genome viewer
-  const viewerRef = useRef(null);
-  const browserRef = useRef(null);
 
   // sync dalliance genome browser as seq view box start, mid and end coord changes
   useEffect(() => {
@@ -749,7 +682,7 @@ function App() {
             </div>}
 
             <div
-              className="bg-gray-50 pt-1 pb-2 border border-gray-300 overflow-x-auto font-mono"
+              className="bg-white pt-1 pb-2 border border-gray-300 overflow-x-auto font-mono"
               ref={seqBoxRef}
               // onScroll={handleScroll}
               onScroll={handleSeqBoxScroll}
