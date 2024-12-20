@@ -30,7 +30,6 @@ function App() {
   const fullSeq = useRef(null);
   const [boxSeq, setBoxSeq] = useState("");
 
-
   const seqBoxRef = useRef(null);
   // width of the full seq in seqbox, like 9000px
   const boxSeqFullWidth = useRef(null);
@@ -49,11 +48,9 @@ function App() {
   const scrollingBox = useRef(null);
   // record scrollLeft for the other box to sync to
   const scrollLeft = useRef(null);
-  const isSyncingScroll = useRef(false);
 
   // Track if sequence is being replaced
   const [isReplacing, setIsReplacing] = useState(false);
-  // const [isPlotReplacing, setIsPlotReplacing] = useState(false);
   const [seqInited, setSeqInited] = useState(false);
 
   const syncScrollPercent = useRef(0);
@@ -142,14 +139,8 @@ function App() {
       boxEnd.current = box_end;
       // update sequence
       fullSeq.current = seq;
-      // at init, because things are symetrical, this works for both + and - strand
       const [slice_start, slice_end] = getSliceIndicesFromCoords(full_start, full_end, box_start, box_end);
-      // console.log({sliceStart: slice_start, sliceEnd:slice_end});
       setBoxSeq(seq.slice(slice_start, slice_end));
-      // test: plot seq halflen = 500 + 325, plus strand only
-      const plotStart = coordinate - boxSeqHalfLen - puffin_offset;
-      const plotEnd = coordinate + boxSeqHalfLen + puffin_offset;
-      plotFullSeq.current = seq.slice(plotStart - full_start, plotEnd - full_start);
 
       setTimeout(() => {
         setSeqInited(true);
@@ -185,8 +176,6 @@ function App() {
 
       // init view coords on tick/ ruler
       setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i)));
-
-      // console.log({bstart: boxStart.current, boxSeqLen: boxSeqLen, viewSeqLen: viewLen });
     }
   }, [seqInited]);
 
@@ -213,10 +202,7 @@ function App() {
       scrollLeftMax.current = leftEnd;
 
       // update plot widths for 1k view
-      if (is1kMode) {
-        // updatePlotWidth(box_w);
-        relayout({ width: box_w });
-      }
+      if (is1kMode) { relayout({ width: box_w }); }
     }
   };
 
@@ -224,9 +210,7 @@ function App() {
   useEffect(() => {
     const observer = new ResizeObserver(() => { updateSeqBoxWidths(); });
 
-    if (seqBoxRef.current) {
-      observer.observe(seqBoxRef.current);
-    }
+    if (seqBoxRef.current) { observer.observe(seqBoxRef.current); }
 
     return () => {
       if (seqBoxRef.current) { observer.unobserve(seqBoxRef.current); }
@@ -272,48 +256,29 @@ function App() {
   const getSwapSeqCoords = (edge) => {
     let newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq;
     // swapping when scrolling to the left edge
-    if (edge === 'left') {
-      if (strand === '-') {
-        newBoxStart = boxStart.current + boxSeqHalfLen;
-        newBoxEnd = newBoxStart + boxSeqLen;
-        updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
-      } else {
-        newBoxStart = boxStart.current - boxSeqHalfLen;
-        newBoxEnd = newBoxStart + boxSeqLen;
-        updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
-      }
-    } else if (edge === 'right') { // swapping when scroll to right edge
-      if (strand === '-') {
-        newBoxStart = boxStart.current - boxSeqHalfLen;
-        newBoxEnd = newBoxStart + boxSeqLen;
-        updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
-      } else {
-        newBoxStart = boxStart.current + boxSeqHalfLen;
-        newBoxEnd = newBoxStart + boxSeqLen;
-        updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
-      }
+    if ((edge === 'left' && strand === '+') || (edge === 'right' && strand === '-')) {
+      newBoxStart = boxStart.current - boxSeqHalfLen;
+      newBoxEnd = newBoxStart + boxSeqLen;
+      updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
+    } else {
+      newBoxStart = boxStart.current + boxSeqHalfLen;
+      newBoxEnd = newBoxStart + boxSeqLen;
+      updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
     }
+
     [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, newBoxStart, newBoxEnd);
     return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
   };
 
-  // modularize handle scroll, separate infinite scrolling, trigger swapping
-  // and syncing between seqBoxRef and plotRef
-
+  // modularize handle scroll, separate infinite scrolling and syncing
   // set scrollingBox based on where the mouse is
-
-  const handleMouseEnterSeqBox = () => {
-    scrollingBox.current = 'seqBox';
-  };
-
-  const handleMouseEnterPlot = () => {
-    scrollingBox.current = 'plot';
-  };
+  const handleMouseEnterSeqBox = () => { scrollingBox.current = 'seqBox'; };
+  const handleMouseEnterPlot = () => { scrollingBox.current = 'plot'; };
 
   // update plot data after swapping
   const updatePlotBuffers = async (direction, newBoxStart, newBoxEnd) => {
     let newStartBuffer, newViewData, newEndBuffer;
-    if (direction === 'left' && strand === '+') {
+    if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
       // shift every thing to left by 500
       const [start, end] = [newBoxStart - boxSeqHalfLen, newBoxEnd - boxSeqHalfLen];
       const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
@@ -323,8 +288,8 @@ function App() {
       newViewData = plotDataStartBuffer.current;
       newEndBuffer = plotDataView.current;
 
-    } else if (direction === 'right' && strand === '+') {
-      // shift every thing left by 500
+    } else {
+      // shift every thing right by 500
       const [start, end] = [newBoxStart + boxSeqHalfLen, newBoxEnd + boxSeqHalfLen];
       const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
       // run inference and get data
@@ -332,24 +297,6 @@ function App() {
       newStartBuffer = plotDataView.current;
       newViewData = plotDataEndBuffer.current;
       newEndBuffer = getPlotData(outputs, start, end);
-    } else if (direction === 'left' && strand === '-') {
-      // end -> view -> start, shift every thing left by 500, update newEnd, bigger
-      const [start, end] = [newBoxStart + boxSeqHalfLen, newBoxEnd + boxSeqHalfLen];
-      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
-      // run inference and get data
-      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffin_offset, sliceEnd + puffin_offset));
-      newStartBuffer = plotDataView.current;
-      newViewData = plotDataEndBuffer.current;
-      newEndBuffer = getPlotData(outputs, start, end);
-    } else if (direction === 'right' && strand === '-') {
-      // end -> view -> start, shift every thing right by 500, update newStart, smaller
-      const [start, end] = [newBoxStart - boxSeqHalfLen, newBoxEnd - boxSeqHalfLen];
-      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
-      // run inference and get data
-      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffin_offset, sliceEnd + puffin_offset));
-      newStartBuffer = getPlotData(outputs, start, end);
-      newViewData = plotDataStartBuffer.current;
-      newEndBuffer = plotDataView.current;
     }
     // udpate reference
     plotDataStartBuffer.current = newStartBuffer;
@@ -370,15 +317,9 @@ function App() {
     setBoxSeq(fullSeq.current.slice(sliceStart, sliceEnd));
 
     // swap with plot
-    if (direction === 'left' && strand === '+') {
+    if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
       setPlotData(plotDataStartBuffer.current);
-    } else if (direction === 'left' && strand === '-') {
-      setPlotData(plotDataEndBuffer.current);
-    } else if (direction === 'right' && strand === '+') {
-      setPlotData(plotDataEndBuffer.current);
-    } else if (direction === 'right' && strand === '-') {
-      setPlotData(plotDataStartBuffer.current);
-    }
+    } else { setPlotData(plotDataEndBuffer.current); }
 
     // first update display, then update sequence (if needed)
     // then update plot buffer - always
@@ -397,19 +338,11 @@ function App() {
       boxEnd.current = newBoxEnd;
 
       // Update the full sequence if needed
-      if (updateSeq) {
-        if (direction === 'left') {
-          await updateFullSeqLeft(); // Await the full sequence update
-        } else {
-          await updateFullSeqRight(); // Await the full sequence update
-        }
-      }
+      if (updateSeq) { await updateFullSeq(direction); }
 
       // Once full sequence is updated, update plot buffers
       await updatePlotBuffers(direction, newBoxStart, newBoxEnd);
       setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
-
-      // update plot data refs
 
     }, 10);
   };
@@ -433,58 +366,37 @@ function App() {
     }
 
     // Sync plot scrolling
-    if (!is1kMode && scrollingBox.current === 'seqBox') {
-      // seqBoxSyncScroll(scrollLeft);
+    if (!is1kMode && scrollingBox.current === 'seqBox' && !isReplacing) {
       plotRef.current.scrollLeft = scroll_left;
     }
   };
 
-  // Plot scroll handler
+  // Plot scroll handler, only syncs
+  // other functionalities are done via scrolling seqbox
   const handlePlotScroll = () => {
     if (!is1kMode && scrollingBox.current === 'plot' && !isReplacing) {
       seqBoxRef.current.scrollLeft = plotRef.current.scrollLeft;
     }
   };
 
-  const updateFullSeqLeft = async () => {
-    // Fetch additional sequence to pad on the left
-    try {
-      if (strand === '-') {
-        // for minus strand, retrive at the end but prepend it 
-        const end = fullEnd.current;
-        const padLeftSeq = await fetchSequence(end, end + paddingLen);
-        fullSeq.current = padLeftSeq + fullSeq.current;
-        fullEnd.current = end + paddingLen;
-      } else {
-        const start = fullStart.current;
-        // retrive 1000 (padding len) left to the current starting coord
-        const padLeftSeq = await fetchSequence(start - paddingLen, start);
-        fullSeq.current = fullSeq.current + padLeftSeq;
-        fullStart.current = start - paddingLen; // Adjust seqStart
-      }
-    } catch (error) {
-      console.error("Error fetching additional sequence:", error);
+  // pad left or right when needed
+  const updateFullSeq = async (direction) => {
+    let padSeq;
+    if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
+      const start = fullStart.current;
+      // retrive 1000 (padding len) left to the current starting coord
+      padSeq = await fetchSequence(start - paddingLen, start);
+      fullStart.current = start - paddingLen; // Adjust seqStart
+    } else {
+      const end = fullEnd.current;
+      padSeq = await fetchSequence(end, end + paddingLen);
+      fullEnd.current = end + paddingLen;
     }
-  };
-
-  const updateFullSeqRight = async () => {
-    // Fetch additional sequence to pad on the left
-    try {
-      if (strand === '-') {
-        // minus strand, same as update right in plus, but append instead of prepend
-        const start = fullStart.current;
-        const padRightSeq = await fetchSequence(start - paddingLen, start);
-        fullSeq.current = fullSeq.current + padRightSeq; // Append fetched sequence
-        fullStart.current = start - paddingLen; // Adjust seqStart
-      } else {
-        const end = fullEnd.current;
-        // retrive 1000 (padding len) right to the end starting coord
-        const padRightSeq = await fetchSequence(end, end + paddingLen);
-        fullSeq.current = fullSeq.current + padRightSeq; // Append fetched sequence
-        fullEnd.current = end + paddingLen; // Adjust full sequence end coord
-      }
-    } catch (error) {
-      console.error("Error fetching additional sequence:", error);
+    // update fullSeq
+    if (direction === 'left') { // prepend on left
+      fullSeq.current = padSeq + fullSeq.current;
+    } else { // append on right
+      fullSeq.current = fullSeq.current + padSeq;
     }
   };
 
@@ -499,7 +411,6 @@ function App() {
     }
     return "transparent"; // Default background
   };
-
 
   // helper function to encode sequence
   const encodeSequence = (inputSequence) => {
@@ -663,7 +574,6 @@ function App() {
       yaxis: 'y4',
     });
 
-    // Set Plot Data and Layout
     return traces;
   }
 
@@ -679,8 +589,6 @@ function App() {
     const newIs1kMode = !is1kMode;
     setIs1kMode(newIs1kMode);
     const newPlotWidth = newIs1kMode ? boxWidth.current : boxSeqFullWidth.current;
-    // updatePlotWidth(newPlotWidth);
-    // relayout({ width: newPlotWidth });
     if (!newIs1kMode) { // switching to not 1k mode, aka scroll mode
       // no margin to sync scroll
       relayout({ margin: { l: 0, r: 0, t: 50, b: 20 }, showlegend: false, width: newPlotWidth });
@@ -703,7 +611,6 @@ function App() {
   // and fullSeq and everything gets reset
   useEffect(() => {
     const initPlot = async () => {
-      // const inputSequence = plotFullSeq.current;
       // absolute coordinates 
       const [viewStart, viewEnd] = [boxStart.current, boxEnd.current];
       const [startBufferStart, startBufferEnd] = [viewStart - boxSeqHalfLen, viewEnd - boxSeqHalfLen];
@@ -754,7 +661,7 @@ function App() {
       }
     };
     // this updates plot whenever sequence gets reinit via form
-    if (plotFullSeq.current && seqInited && isPuffinSessionReady) {
+    if (seqInited && isPuffinSessionReady) {
       initPlot();
     }
   }, [seqInited, isPuffinSessionReady]);
