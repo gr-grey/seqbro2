@@ -1,5 +1,5 @@
 {
-    "modelPath": "/puffinPantomCage.onnx",
+    "modelPath": "/puffinFantomCage.onnx",
     "puffinOffset": 325,
     "grid": {
         "rows": 4,

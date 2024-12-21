@@ -7,7 +7,6 @@ import NavBar from './NavBar';
 import GenomeForm from './GenomeForm';
 import DallianceViewer from './DallianceViewer';
 import Plot from 'react-plotly.js';
-// import plotConfig from './assets/plotConfig.json';
 
 function App() {
   // get sequence
