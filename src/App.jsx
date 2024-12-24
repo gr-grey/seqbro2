@@ -7,6 +7,7 @@ import NavBar from './NavBar';
 import GenomeForm from './GenomeForm';
 import DallianceViewer from './DallianceViewer';
 import Plot from 'react-plotly.js';
+import useDebounce from './useDebounce';
 
 function App() {
   // get sequence
@@ -28,30 +29,6 @@ function App() {
   const coordTicks = [0.0, 0.5, 1.0];
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
-  // plot configure from puffin.config.json in public folder
-  // const [config, setConfig] = useState(null);
-  const puffinConfig = useRef(null);
-  // const modelPath = useRef(null);
-  // const puffinConfig.current.puffinOffset = useRef(null);
-  // const traces = useRef(null);
-
-  useEffect(() => {
-    const loadModelAndConfig = async () => {
-      try {
-        const response = await fetch('/puffin.config.json');
-        const data = await response.json();
-        puffinConfig.current = data;
-        // init puffin session at the beginning
-        puffinSession.current = await window.ort.InferenceSession.create(data.modelPath);
-        setIsPuffinSessionReady(true);
-        console.log('Model and config loaded from puffin.config.json.');
-
-      } catch (error) {
-        console.error('Error loading configuration and initing model', error);
-      }
-    };
-    loadModelAndConfig();
-  }, []);
 
   const plotLeftMargin = 10;
   const plotLegendLayout = {
@@ -115,6 +92,29 @@ function App() {
 
   // left < and right > buttons with continuous scrolling
   const [scrollInterval, setScrollInterval] = useState(null);
+
+  // plot configure from puffin.config.json in public folder
+  // const [config, setConfig] = useState(null);
+  const puffinConfig = useRef(null);
+
+  useEffect(() => {
+    const loadModelAndConfig = async () => {
+      try {
+        const response = await fetch('/puffin.config.json');
+        const data = await response.json();
+        puffinConfig.current = data;
+        // init puffin session at the beginning
+        puffinSession.current = await window.ort.InferenceSession.create(data.modelPath);
+        setIsPuffinSessionReady(true);
+        console.log('Model and config loaded from puffin.config.json.');
+
+      } catch (error) {
+        console.error('Error loading configuration and initing model', error);
+      }
+    };
+    loadModelAndConfig();
+  }, []);
+
 
   // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
   const range = (start, stop, step = 1) =>
@@ -542,6 +542,10 @@ function App() {
     relayout({ showlegend: newShowLegend });
   };
 
+  const [plotDivHeight, setPlotDivHeight] = useState(500);
+  const plotTopMargin = 50;
+  const plotBottomMargin = 20;
+
   // reruns everytime initSeq changes, which happens when genome form is updated
   // and fullSeq and everything gets reset
   useEffect(() => {
@@ -569,16 +573,16 @@ function App() {
         const totalPlots = puffinConfig.current.grid.rows * puffinConfig.current.grid.columns;
         const axisLayout = {};
         for (let i = 0; i < totalPlots; i++) {
-            axisLayout[`xaxis${i + 1}`] = xaxisLayout;
+          axisLayout[`xaxis${i + 1}`] = xaxisLayout;
         }
         setPlotLayout({
           // title: 'Puffin Model Plot',
           ...axisLayout,
-          height: 500,
+          height: plotDivHeight,
           grid: puffinConfig.current.grid,
           width: is1kMode ? boxWidth.current : boxSeqFullWidth.current,
           template: 'plotly_white',
-          margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 },
+          margin: { l: plotLeftMargin, r: plotLeftMargin, t: plotTopMargin, b: plotBottomMargin },
           legend: plotLegendLayout,
           showlegend: showLegend,
         });
@@ -605,13 +609,13 @@ function App() {
 
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotData };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
   // sync dalliance genome browser as seq view box start, mid and end coord changes
   useEffect(() => {
-    if (browserRef.current && viewCoords.length) {
+    if (browserRef.current && viewCoords.length && viewCoords[0] && viewCoords[2]) {
       if (strand === '+') {
         browserRef.current.setLocation(chromosome, viewCoords[0], viewCoords[2]);
       } else { // minus strand
@@ -619,6 +623,35 @@ function App() {
       }
     }
   }, [viewCoords]);
+
+
+  const handleMouseDownResize = (e) => {
+    e.preventDefault();
+
+    // Attach event listeners for dragging
+    document.addEventListener("mousemove", handleMouseMoveResize);
+    document.addEventListener("mouseup", handleMouseUpResize);
+  };
+
+  const handleMouseMoveResize = (e) => {
+    setPlotDivHeight((prevHeight) => {
+      const newHeight = prevHeight + e.movementY;
+      return Math.max(100, newHeight); // Set a minimum height to avoid collapsing
+    });
+  };
+
+  const handleMouseUpResize = () => {
+    // Remove event listeners when resizing stops
+    document.removeEventListener("mousemove", handleMouseMoveResize);
+    document.removeEventListener("mouseup", handleMouseUpResize);
+  };
+
+  // prevent excessive rerendering when resize plot area
+  const debouncedHeight = useDebounce(plotDivHeight, 200);
+
+  useEffect(() => {
+    relayout({ height: debouncedHeight });
+  }, [debouncedHeight]);
 
   return (
     <>
@@ -680,33 +713,41 @@ function App() {
               ))}
             </div>}
 
-            <div
-              className="bg-white pt-1 pb-2 border border-gray-300 overflow-x-auto font-mono"
-              ref={seqBoxRef}
-              // onScroll={handleScroll}
-              onScroll={handleSeqBoxScroll}
-              style={{ whiteSpace: "nowrap" }}
-              onMouseEnter={handleMouseEnterSeqBox}
-            >
-              {boxSeq
-                ? boxSeq.split("").map((char, index) => (
-                  <Tippy content={toolTips[index]} key={index}>
-                    <span style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }} >
-                      {char}
-                    </span>
-                  </Tippy>
-                  // vanila tooltips
-                  // <span
-                  //   key={index}
-                  //   className="inline-block"
-                  //   title={toolTips[index]} // Native tooltip with coordinate
-                  //   style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }}
-                  // >
-                  //   {char}
-                  // </span>
-                ))
-                : "Loading...."}
+            <div className='relative'>
+              <div
+                className="bg-white border border-gray-300 overflow-x-auto font-mono"
+                ref={seqBoxRef}
+                // onScroll={handleScroll}
+                onScroll={handleSeqBoxScroll}
+                style={{ whiteSpace: "nowrap" }}
+                onMouseEnter={handleMouseEnterSeqBox}
+              >
+                {/* Red center line in sequence box */}
+                <div
+                  className="absolute top-0 bottom-0 w-[2px] bg-red-500"
+                  style={{ left: "50%" }}
+                ></div>
+                {boxSeq
+                  ? boxSeq.split("").map((char, index) => (
+                    <Tippy content={toolTips[index]} key={index}>
+                      <span style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }} >
+                        {char}
+                      </span>
+                    </Tippy>
+                    // vanila tooltips
+                    // <span
+                    //   key={index}
+                    //   className="inline-block"
+                    //   title={toolTips[index]} // Native tooltip with coordinate
+                    //   style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }}
+                    // >
+                    //   {char}
+                    // </span>
+                  ))
+                  : "Loading...."}
+              </div>
             </div>
+
           </div>
 
           <DallianceViewer
@@ -747,25 +788,37 @@ function App() {
           </div>
 
           {/* plotly puffin */}
-          <div className='overflow-x-auto border border-gray-300'
-            ref={plotRef}
-            onScroll={handlePlotScroll}
-            onMouseEnter={handleMouseEnterPlot}
-          >
-            {plotData && plotLayout && boxSeqFullWidth.current ? (
-              <Plot
-                data={plotData}
-                layout={plotLayout}
-                config={{ responsive: false }}
-              />
-            ) : (
-              <p>Loading plot...</p>
-            )}
+          <div className='relative'>
+            <div className='overflow-x-auto border border-gray-300'
+              ref={plotRef}
+              onScroll={handlePlotScroll}
+              onMouseEnter={handleMouseEnterPlot}
+              style={{ height: `${plotDivHeight}px` }} // Set dynamic height
+            >
+              <div
+                className="absolute top-100 bottom-500 w-[2px] bg-red-500"
+                style={{ left: "50%" }}
+              ></div>
+
+              {plotData && plotLayout && boxSeqFullWidth.current ? (
+                <Plot
+                  data={plotData}
+                  layout={plotLayout}
+                  config={{ responsive: false }}
+                />
+              ) : (
+                <p>Loading plot...</p>
+              )}
+            </div>
+            <div
+              className="w-full h-2 bg-gray-400 cursor-row-resize"
+              onMouseDown={handleMouseDownResize}
+            ></div>
           </div>
 
           <DebugPanel {...debugVars} />
           {/* Center line for debug */}
-          <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div>
+          {/* <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div> */}
         </div>
 
       </div>
