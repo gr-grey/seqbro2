@@ -99,6 +99,9 @@ function App() {
   // const [config, setConfig] = useState(null);
   const puffinConfig = useRef(null);
 
+  // toggle on and off helper line
+  const [showCentralLine, setShowCentralLine] = useState(true);
+
   useEffect(() => {
     const loadModelAndConfig = async () => {
       try {
@@ -547,6 +550,11 @@ function App() {
     relayout({ showlegend: newShowLegend });
   };
 
+  const toggleCentralLine= () => {
+    const newShowCentralLine = !showCentralLine;
+    setShowCentralLine(newShowCentralLine);
+  };
+
   const [plotDivHeight, setPlotDivHeight] = useState(500);
   const plotTopMargin = 0;
   const plotBottomMargin = 15;
@@ -623,7 +631,7 @@ function App() {
 
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -729,7 +737,7 @@ function App() {
 
             <div className='relative'>
               <div
-                className="bg-white border border-gray-300 overflow-x-auto font-mono"
+                className="sequence-box bg-white border border-gray-300 overflow-x-auto font-mono"
                 ref={seqBoxRef}
                 onScroll={handleSeqBoxScroll}
                 style={{ whiteSpace: "nowrap" }}
@@ -783,6 +791,16 @@ function App() {
                 />
                 <div className="peer h-6 w-11 rounded-full border bg-slate-200 after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-sky-800 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-green-300"></div>
               </label>
+              <span className="text-gray-700 font-medium">Central Line</span>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={showCentralLine}
+                  onChange={()=>{setShowCentralLine(!showCentralLine);}}
+                  className="peer sr-only"
+                />
+                <div className="peer h-6 w-11 rounded-full border bg-slate-200 after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-sky-800 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-green-300"></div>
+              </label>
             </div>
 
             {/* Legend Toggle */}
@@ -798,31 +816,9 @@ function App() {
                 <div className="peer h-6 w-11 rounded-full border bg-slate-200 after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-sky-800 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-green-300"></div>
               </label>
             </div>)}
+
           </div>
 
-          {/* plotly puffin */}
-          {/* <div className='relative'>
-            <div className='overflow-x-auto border border-gray-300'
-              ref={plotRef}
-              onScroll={handlePlotScroll}
-              onMouseEnter={handleMouseEnterPlot}
-              style={{ height: `${plotDivHeight}px` }} // Set dynamic height
-            >
-              {plotData && plotLayout && boxSeqFullWidth.current ? (
-                <Plot
-                  data={plotData}
-                  layout={plotLayout}
-                  config={{ responsive: false }}
-                />
-              ) : (
-                <p>Loading plot...</p>
-              )}
-            </div>
-            <div
-              className="w-full h-2 bg-gray-400 cursor-row-resize"
-              onMouseDown={handleMouseDownResize}
-            ></div>
-          </div> */}
           <div className="relative">
             {/* title area */}
             {plotData && <div className="w-full h-4 mb-4 text-xl flex items-center justify-center">{puffinConfig.current.title}</div>}
@@ -830,7 +826,7 @@ function App() {
             {/* Plot area */}
             <div className='relative'>
               <div
-                className="overflow-x-auto border border-red-500"
+                className="plot-box overflow-x-auto"
                 ref={plotRef}
                 onScroll={handlePlotScroll}
                 onMouseEnter={handleMouseEnterPlot}
@@ -846,14 +842,13 @@ function App() {
                     />
                     <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
                       {/* Central vertical line */}
-                      <div
+                      {showCentralLine && <div
                         className="absolute h-full w-[2px] bg-gray-500 opacity-60"
                         style={{
-                          // left: '50%', // Position at the horizontal center
                           left: is1kMode ? `${ getPlotLinePercentage(commonScrollPercent)}%` : '50%', 
                           zIndex: 1, // Place below subtitles
                         }}
-                      ></div>
+                      ></div>}
                       {puffinConfig.current.subtitles.map((title, index) => (
                         <div
                           key={index}
@@ -874,55 +869,7 @@ function App() {
               </div>
             </div>
 
-            {/* axis area*/}
-            <div
-              className="relative w-full h-[30px] border-t border-gray-700"
-            >
-
-              {/* Ticks */}
-              {plotTicks.map((pos, index) => (
-                <div
-                  key={index}
-                  className="absolute w-[3px] h-2 bg-blue-500"
-                  style={{
-                    left: `${pos}%`, // Position ticks along the width
-                    top: "0%", // Align ticks with the axis line
-                  }}
-                ></div>
-              ))}
-              {/* Coordinates */}
-              <div>
-                {viewCoords.length > 0 && (
-                  <>
-                    <div
-                      className="absolute text-xs text-blue-600"
-                      style={{
-                        left: "0%", bottom: "0%", transform: "translateX(0%)",
-                      }}
-                    >
-                      {Math.floor(viewCoords[0])}
-                    </div>
-                    <div
-                      className="absolute text-xs text-blue-600"
-                      style={{
-                        left: "50%", bottom: "0%", transform: "translateX(-50%)",
-                      }}
-                    >
-                      {Math.floor(viewCoords[1])}
-                    </div>
-                    <div
-                      className="absolute text-xs text-blue-600"
-                      style={{
-                        left: "100%", bottom: "0%", transform: "translateX(-50%)",
-                      }}
-                    >
-                      {Math.floor(viewCoords[2])}
-                    </div>
-                  </>
-                )}
-              </div>
-
-            </div>
+          
 
             {/* Resize line */}
             <div

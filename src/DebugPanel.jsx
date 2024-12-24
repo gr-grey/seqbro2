@@ -1,6 +1,6 @@
 import React from "react";
 
-const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout }) => {
+const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine }) => {
 
     return (
         <>
@@ -8,7 +8,7 @@ const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent
                 <h1>Debug:</h1>
                 <ul className="space-y-2 text-sm">
                     <li><span> --------Plotly plot tracking---------</span></li>
-                    {/* <li><span> plot full seq len </span> {`${plotFullSeq ? plotFullSeq.current.length : 0}`}</li> */}
+                    <li><span>Central line</span> {`${showCentralLine}`}</li>
                     <li><span> plot div height </span> {plotDivHeight}</li>
                     {/* <li>
                         <span> plot layout: </span>
