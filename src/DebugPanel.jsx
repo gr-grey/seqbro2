@@ -1,6 +1,6 @@
 import React from "react";
 
-const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords,  plotDivHeight}) => {
+const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout }) => {
 
     return (
         <>
@@ -10,7 +10,10 @@ const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, f
                     <li><span> --------Plotly plot tracking---------</span></li>
                     {/* <li><span> plot full seq len </span> {`${plotFullSeq ? plotFullSeq.current.length : 0}`}</li> */}
                     <li><span> plot div height </span> {plotDivHeight}</li>
-                    {/* <li><span> plot data[0] y len </span> {`${plotData[0].y.length}`}</li> */}
+                    {/* <li>
+                        <span> plot layout: </span>
+                        <pre className="whitespace-pre-wrap">{plotLayout ? JSON.stringify(plotLayout, null, 2) : "N/A"}</pre>
+                    </li> */}
 
                     <li><span> --------SeqBox scrolling tracking---------</span></li>
                     <li><span> view coords: </span> {`${viewCoords}`}</li>
@@ -28,7 +31,7 @@ const DebugPanel = ({boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, f
                     </li>
                     <li><span> Box seq start end:</span> {boxStart.current} - {boxEnd.current}</li>
                     <li>
-                        <span> Full seq length:</span> {fullSeq.current? fullSeq.current.length : 0};
+                        <span> Full seq length:</span> {fullSeq.current ? fullSeq.current.length : 0};
                         <span> display seq length:</span> {boxSeq.length};
                     </li>
 

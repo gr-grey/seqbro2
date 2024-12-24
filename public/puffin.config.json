@@ -1,11 +1,18 @@
 {
     "modelPath": "/puffinFantomCage.onnx",
     "puffinOffset": 325,
+    "title": "Puffin Fantom Cage",
     "grid": {
         "rows": 4,
         "columns": 1,
         "pattern": "independent"
     },
+    "subtitles": [
+        "Motif Activation",
+        "Motif Effects",
+        "Sum of Motif Effects",
+        "Predictions"
+    ],
     "traces": [
         {
             "result_key": "motifact1",

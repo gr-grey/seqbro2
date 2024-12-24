@@ -28,6 +28,7 @@ function App() {
   const initHalfLen = 2000;
   const coordTicks = [0.0, 0.5, 1.0];
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
+  const plotTicks = [0, 50, 100]; // Tick positions in percentages
 
 
   const plotLeftMargin = 10;
@@ -526,10 +527,10 @@ function App() {
     const newPlotWidth = newIs1kMode ? boxWidth.current : boxSeqFullWidth.current;
     if (!newIs1kMode) { // switching to not 1k mode, aka scroll mode
       // no margin to sync scroll
-      relayout({ margin: { l: 0, r: 0, t: 50, b: 20 }, showlegend: false, width: newPlotWidth });
+      relayout({ margin: { l: 0, r: 0, t: plotTopMargin, b: plotBottomMargin }, showlegend: false, width: newPlotWidth });
       setTimeout(() => { plotRef.current.scrollLeft = scrollLeft.current; }, 10);
     } else {
-      relayout({ margin: { l: plotLeftMargin, r: plotLeftMargin, t: 50, b: 20 }, showlegend: showLegend, width: newPlotWidth, });
+      relayout({ margin: { l: plotLeftMargin, r: plotLeftMargin, t: plotTopMargin, b: plotBottomMargin }, showlegend: showLegend, width: newPlotWidth, });
     }
   };
 
@@ -543,8 +544,9 @@ function App() {
   };
 
   const [plotDivHeight, setPlotDivHeight] = useState(500);
-  const plotTopMargin = 50;
-  const plotBottomMargin = 20;
+  const plotTopMargin = 0;
+  const plotBottomMargin = 15;
+  // const rulerHeight = 30;
 
   // reruns everytime initSeq changes, which happens when genome form is updated
   // and fullSeq and everything gets reset
@@ -609,7 +611,7 @@ function App() {
 
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -788,18 +790,13 @@ function App() {
           </div>
 
           {/* plotly puffin */}
-          <div className='relative'>
+          {/* <div className='relative'>
             <div className='overflow-x-auto border border-gray-300'
               ref={plotRef}
               onScroll={handlePlotScroll}
               onMouseEnter={handleMouseEnterPlot}
               style={{ height: `${plotDivHeight}px` }} // Set dynamic height
             >
-              <div
-                className="absolute top-100 bottom-500 w-[2px] bg-red-500"
-                style={{ left: "50%" }}
-              ></div>
-
               {plotData && plotLayout && boxSeqFullWidth.current ? (
                 <Plot
                   data={plotData}
@@ -812,6 +809,104 @@ function App() {
             </div>
             <div
               className="w-full h-2 bg-gray-400 cursor-row-resize"
+              onMouseDown={handleMouseDownResize}
+            ></div>
+          </div> */}
+          <div className="relative">
+            {/* title area */}
+            {plotData && <div className="w-full h-4 mb-4 text-xl flex items-center justify-center">{puffinConfig.current.title}</div>}
+
+            {/* Plot area */}
+            <div className='relative'>
+              <div
+                className="overflow-x-auto"
+                ref={plotRef}
+                onScroll={handlePlotScroll}
+                onMouseEnter={handleMouseEnterPlot}
+                style={{ height: `${plotDivHeight+plotBottomMargin}px` }} // Set dynamic height
+              >
+                {/* Plotly plot */}
+                {plotData && plotLayout && boxSeqFullWidth.current ? (
+                  <>
+                    <Plot
+                      data={plotData}
+                      layout={plotLayout}
+                      config={{ responsive: false }}
+                    />
+                    <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+                      {puffinConfig.current.subtitles.map((title, index) => (
+                        <div
+                          key={index}
+                          className="absolute w-full text-center text-sm font-semibold text-gray-700"
+                          style={{
+                            top: `${index * 25}%`, // Position each title vertically
+                            transform: 'translateY(-50%)', // Center vertically relative to the calculated position
+                          }}
+                        >
+                          {title}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p>Loading plot...</p>
+                )}
+              </div>
+            </div>
+
+            {/* axis area*/}
+            <div
+              className="relative w-full h-[30px] border-t border-gray-700"
+            >
+
+              {/* Ticks */}
+              {plotTicks.map((pos, index) => (
+                <div
+                  key={index}
+                  className="absolute w-[3px] h-2 bg-blue-500"
+                  style={{
+                    left: `${pos}%`, // Position ticks along the width
+                    top: "0%", // Align ticks with the axis line
+                  }}
+                ></div>
+              ))}
+              {/* Coordinates */}
+              <div>
+                {viewCoords.length > 0 && (
+                  <>
+                    <div
+                      className="absolute text-xs text-blue-600"
+                      style={{
+                        left: "0%", bottom: "0%", transform: "translateX(0%)",
+                      }}
+                    >
+                      {Math.floor(viewCoords[0])}
+                    </div>
+                    <div
+                      className="absolute text-xs text-blue-600"
+                      style={{
+                        left: "50%", bottom: "0%", transform: "translateX(-50%)",
+                      }}
+                    >
+                      {Math.floor(viewCoords[1])}
+                    </div>
+                    <div
+                      className="absolute text-xs text-blue-600"
+                      style={{
+                        left: "100%", bottom: "0%", transform: "translateX(-50%)",
+                      }}
+                    >
+                      {Math.floor(viewCoords[2])}
+                    </div>
+                  </>
+                )}
+              </div>
+
+            </div>
+
+            {/* Resize line */}
+            <div
+              className="w-full h-1 bg-gray-500 cursor-row-resize"
               onMouseDown={handleMouseDownResize}
             ></div>
           </div>
