@@ -68,7 +68,8 @@ function App() {
   const [isReplacing, setIsReplacing] = useState(false);
   const [seqInited, setSeqInited] = useState(false);
 
-  const syncScrollPercent = useRef(0);
+  // const syncScrollPercent = useRef(0);
+  const [commonScrollPercent, setCommonScrollPercent] = useState(0);
   const [toolTips, setToolTips] = useState([]);
 
   // toggle 1k full view or local sync view
@@ -216,7 +217,8 @@ function App() {
       boxSeqFullWidth.current = full_w;
       boxWidth.current = view_w;
       scrollLeftMax.current = lmax;
-      syncScrollPercent.current = middlePoint;
+      // syncScrollPercent.current = middlePoint;
+      setCommonScrollPercent(middlePoint);
 
       // init view coords on tick/ ruler
       setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i)));
@@ -241,7 +243,8 @@ function App() {
       // update varaibles
       boxWidth.current = box_w;
       viewSeqLen.current = viewLen;
-      syncScrollPercent.current = scrollPercent;
+      // syncScrollPercent.current = scrollPercent;
+      setCommonScrollPercent(scrollPercent);
       scrollLeft.current = scroll_left;
       scrollLeftMax.current = leftEnd;
 
@@ -399,7 +402,8 @@ function App() {
     setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i)));
     // udpate reference tracker
     scrollLeft.current = scroll_left;
-    syncScrollPercent.current = scrollPercent;
+    // syncScrollPercent.current = scrollPercent;
+    setCommonScrollPercent(scrollPercent);
 
     // disable infinite scrolling when in 1k mode
     if (!is1kMode && scrollPercent < 0.05 && !isReplacing) {
@@ -609,9 +613,17 @@ function App() {
     }
   }, [seqInited, isPuffinSessionReady]);
 
+  const getPlotLinePercentage = (commonScrollPercent) => {
+    const percent = (commonScrollPercent * (boxSeqLen - viewSeqLen.current) + viewSeqLen.current/2) / boxSeqLen;
+    // adjust for left margin
+    const fullLen = boxWidth.current - 2 * plotLeftMargin;
+    const adjustedPercent = (plotLeftMargin + percent*fullLen) / boxWidth.current;
+    return adjustedPercent * 100;
+  };
+
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -719,14 +731,13 @@ function App() {
               <div
                 className="bg-white border border-gray-300 overflow-x-auto font-mono"
                 ref={seqBoxRef}
-                // onScroll={handleScroll}
                 onScroll={handleSeqBoxScroll}
                 style={{ whiteSpace: "nowrap" }}
                 onMouseEnter={handleMouseEnterSeqBox}
               >
                 {/* Red center line in sequence box */}
                 <div
-                  className="absolute top-0 bottom-0 w-[2px] bg-red-500"
+                  className="absolute top-0 bottom-0 w-[2px] bg-gray-500"
                   style={{ left: "50%" }}
                 ></div>
                 {boxSeq
@@ -819,11 +830,11 @@ function App() {
             {/* Plot area */}
             <div className='relative'>
               <div
-                className="overflow-x-auto"
+                className="overflow-x-auto border border-red-500"
                 ref={plotRef}
                 onScroll={handlePlotScroll}
                 onMouseEnter={handleMouseEnterPlot}
-                style={{ height: `${plotDivHeight+plotBottomMargin}px` }} // Set dynamic height
+                style={{ height: `${plotDivHeight + plotBottomMargin}px` }} // Set dynamic height
               >
                 {/* Plotly plot */}
                 {plotData && plotLayout && boxSeqFullWidth.current ? (
@@ -834,13 +845,22 @@ function App() {
                       config={{ responsive: false }}
                     />
                     <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+                      {/* Central vertical line */}
+                      <div
+                        className="absolute h-full w-[2px] bg-gray-500 opacity-60"
+                        style={{
+                          // left: '50%', // Position at the horizontal center
+                          left: is1kMode ? `${ getPlotLinePercentage(commonScrollPercent)}%` : '50%', 
+                          zIndex: 1, // Place below subtitles
+                        }}
+                      ></div>
                       {puffinConfig.current.subtitles.map((title, index) => (
                         <div
                           key={index}
                           className="absolute w-full text-center text-sm font-semibold text-gray-700"
                           style={{
                             top: `${index * 25}%`, // Position each title vertically
-                            transform: 'translateY(-50%)', // Center vertically relative to the calculated position
+                            transform: 'translateY(-75%)', // Center vertically relative to the calculated position
                           }}
                         >
                           {title}

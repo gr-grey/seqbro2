@@ -1,6 +1,6 @@
 import React from "react";
 
-const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout }) => {
+const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout }) => {
 
     return (
         <>
@@ -24,7 +24,7 @@ const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, syncScrollPercent, 
                     <li><span> box seq width:</span> {boxSeqFullWidth.current}</li>
                     <li><span> box view width:</span> {boxWidth.current}</li>
                     <li><span> viewSeqLen:</span> {viewSeqLen.current}</li>
-                    <li><span> scroll percent</span> {syncScrollPercent.current}</li>
+                    <li><span> scroll percent</span> {commonScrollPercent}</li>
                     <li>
                         <span> Full seq Start - End (zero based, exclude last) coordinate:</span>
                         {fullStart.current} - {fullEnd.current}
