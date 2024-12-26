@@ -28,8 +28,6 @@ function App() {
   const initHalfLen = 2000;
   const coordTicks = [0.0, 0.5, 1.0];
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
-  const plotTicks = [0, 50, 100]; // Tick positions in percentages
-
 
   const plotLeftMargin = 10;
   const plotLegendLayout = {
@@ -68,9 +66,7 @@ function App() {
   const [isReplacing, setIsReplacing] = useState(false);
   const [seqInited, setSeqInited] = useState(false);
 
-  // const syncScrollPercent = useRef(0);
   const [commonScrollPercent, setCommonScrollPercent] = useState(0);
-  const [toolTips, setToolTips] = useState([]);
 
   // toggle 1k full view or local sync view
   const [is1kMode, setIs1kMode] = useState(false);
@@ -78,6 +74,8 @@ function App() {
   // global onnx inference session for puffin
   const puffinSession = useRef(null);
   const [isPuffinSessionReady, setIsPuffinSessionReady] = useState(false);
+  const annoSession = useRef(null);
+
   // plotly plot part
   const [plotData, setPlotData] = useState(null);
   const [plotLayout, setPlotLayout] = useState(null);
@@ -102,6 +100,13 @@ function App() {
   // toggle on and off helper line
   const [showCentralLine, setShowCentralLine] = useState(true);
 
+  // annotation colors, tooltips
+  const [toolTips, setToolTips] = useState([]);
+  // background color for motifs
+  const [annoColors, setAnnoColors] = useState([]);
+  // const colorThreshold = 0.05;
+  const scaledAnnoScores = useRef([]);
+
   useEffect(() => {
     const loadModelAndConfig = async () => {
       try {
@@ -110,6 +115,7 @@ function App() {
         puffinConfig.current = data;
         // init puffin session at the beginning
         puffinSession.current = await window.ort.InferenceSession.create(data.modelPath);
+        annoSession.current = await window.ort.InferenceSession.create(data.annoModelPath);
         setIsPuffinSessionReady(true);
         console.log('Model and config loaded from puffin.config.json.');
 
@@ -120,22 +126,12 @@ function App() {
     loadModelAndConfig();
   }, []);
 
-
   // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
   const range = (start, stop, step = 1) =>
     Array.from(
       { length: Math.ceil((stop - start) / step) },
       (_, i) => start + i * step,
     );
-
-  // set tool tips according to strand
-  const getToolTips = (start, end, strand) => {
-    if (strand === '-') {
-      return range(end, start, -1); // Reverse range for '-' strand
-    } else {
-      return range(start, end); // Normal range for '+' strand
-    }
-  };
 
   // coords of viewing part of seqbox, left -> right: tick percent 0 -> 1
   const getViewCoords = (start, scrollChar, clientChar, scrollPercent, tickPercent) => {
@@ -192,8 +188,6 @@ function App() {
 
       setTimeout(() => {
         setSeqInited(true);
-        // init tooltips
-        setToolTips(getToolTips(box_start, box_end, strand));
       }, 10);
     }
     init();
@@ -391,7 +385,7 @@ function App() {
 
       // Once full sequence is updated, update plot buffers
       await updatePlotBuffers(direction, newBoxStart, newBoxEnd);
-      setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
+      // setToolTips(getToolTips(newBoxStart, newBoxEnd, strand));
 
     }, 10);
   };
@@ -450,17 +444,17 @@ function App() {
     }
   };
 
-  // Add background color for beginning, middle and end of sequence for debug
-  const getBackgroundColor = (index, seqLength) => {
-    if (index < boxSeqLen * 0.06) {
-      return "yellow"; // First 50 characters
-    } else if (index === Math.floor(seqLength / 2)) {
-      return "red"; // Middle character
-    } else if (index >= seqLength - boxSeqLen * 0.06) {
-      return "green"; // Last 50 characters
-    }
-    return "transparent"; // Default background
-  };
+  // // Add background color for beginning, middle and end of sequence for debug
+  // const getBackgroundColor = (index, seqLength) => {
+  //   if (index < boxSeqLen * 0.06) {
+  //     return "yellow"; // First 50 characters
+  //   } else if (index === Math.floor(seqLength / 2)) {
+  //     return "red"; // Middle character
+  //   } else if (index >= seqLength - boxSeqLen * 0.06) {
+  //     return "green"; // Last 50 characters
+  //   }
+  //   return "transparent"; // Default background
+  // };
 
   // helper function to encode sequence
   const encodeSequence = (inputSequence) => {
@@ -494,6 +488,130 @@ function App() {
       return results;
     } catch (error) {
       console.error("Error running inference:", error);
+      return null;
+    }
+  };
+
+  // Helper function: Convert Hex to RGB
+  const hexToRgb = hex => {
+    const bigint = parseInt(hex.slice(1), 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return [r, g, b];
+  };
+
+  // Helper: Convert Hex to HSL
+  const hexToHsl = (hex) => {
+    const rgb = hexToRgb(hex); // Convert hex to RGB
+    const [r, g, b] = rgb.map(v => v / 255); // Normalize to [0, 1]
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const delta = max - min;
+
+    // Calculate Hue
+    let h = 0;
+    if (delta !== 0) {
+      if (max === r) {
+        h = ((g - b) / delta) % 6;
+      } else if (max === g) {
+        h = (b - r) / delta + 2;
+      } else {
+        h = (r - g) / delta + 4;
+      }
+      h = Math.round(h * 60);
+      if (h < 0) h += 360;
+    }
+
+    // Calculate Lightness
+    const l = (max + min) / 2;
+
+    // Calculate Saturation
+    const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+
+    return [h, s * 100, l * 100]; // HSL in [0-360, 0-100, 0-100] range
+  };
+
+  // Helper: Convert HSL to CSS String
+  const hslToCss = (h, s, l) => `hsl(${h}, ${s}%, ${l}%)`;
+
+  // Updated getToolTips function
+  const annoSetup = (start, end, strand, maxIndices, maxValues, maxAll, colorHslArr, colorThreshold, scaledAnnoScoresRef, motifNames) => {
+    // Reverse range if strand is '-'
+    const coordinates = strand === '-' ? range(end, start, -1) : range(start, end);
+
+    // Initialize arrays
+    const tooltips = [];
+    const annoColors = [];
+    const scaledAnnoScores = [];
+
+    // Loop through each base pair to calculate values
+    coordinates.forEach((coordinate, index) => {
+      const motifIndex = maxIndices[index];
+      const motifScore = maxValues[index];
+      const scaledScore = motifScore / maxAll; // Scale the score by maxAll
+
+      // Add scaled score to the array
+      scaledAnnoScores.push(scaledScore);
+
+      // Generate tooltip
+      if (scaledScore < colorThreshold) {
+        tooltips.push(`${coordinate}`); // Only coordinate if below threshold
+      } else {
+        const motifName = motifNames[Number(motifIndex)]; // Get motif name
+        tooltips.push(`${coordinate} ${motifName}: ${motifScore.toFixed(3)} (${scaledScore.toFixed(3)})`);
+      }
+
+      // Generate annotation color
+      if (scaledScore < colorThreshold) {
+        annoColors.push("#FFFFFF"); // White if below threshold
+      } else {
+        const [h, s, l] = colorHslArr[motifIndex]; // Get HSL values for the motif
+        const blendedLightness = 100 - (100 - l) * scaledScore; // Adjust lightness for intensity
+        annoColors.push(hslToCss(h, s, blendedLightness));
+      }
+    });
+
+    // Update the scaled annotation scores ref
+    scaledAnnoScoresRef.current = scaledAnnoScores;
+
+    // Return tooltips and annotation colors
+    return { tooltips, annoColors };
+  };
+
+  // use inference results for annotations
+  const runAnnoProcessing = async (results, start, end, strand, colorHslArr, colorThreshold, scaledAnnoScoresRef, motifNames) => {
+    try {
+      // Collect motif scores
+      const motifScores = [];
+
+      for (const key of puffinConfig.current.annoInputs) {
+        const tensor = results[key]; // Access the tensor using the key
+        if (!tensor || tensor.data.length !== 1000) {
+          throw new Error(`Invalid tensor data for ${key}`);
+        }
+        motifScores.push(Array.from(tensor.data)); // Convert tensor data to an array
+      }
+
+      // Flatten and create input tensor
+      const flatMotifScores = motifScores.flat();
+      const stackedTensor = new ort.Tensor('float32', flatMotifScores, [18, 1000]);
+
+      // Run the post-processing model
+      const feeds = { motif_scores: stackedTensor };
+      const outputs = await annoSession.current.run(feeds);
+
+      const maxValues = outputs.max_values.data;
+      const maxIndices = outputs.max_indices.data;
+      const maxAll = outputs.max_all.data[0];
+
+      const { tooltips, annoColors } = annoSetup(start, end, strand, maxIndices, maxValues, maxAll, colorHslArr, colorThreshold, scaledAnnoScoresRef, motifNames)
+
+      return { tooltips, annoColors };
+
+    } catch (error) {
+      console.error("Error during post-processing:", error);
       return null;
     }
   };
@@ -550,15 +668,9 @@ function App() {
     relayout({ showlegend: newShowLegend });
   };
 
-  const toggleCentralLine= () => {
-    const newShowCentralLine = !showCentralLine;
-    setShowCentralLine(newShowCentralLine);
-  };
-
   const [plotDivHeight, setPlotDivHeight] = useState(500);
   const plotTopMargin = 0;
   const plotBottomMargin = 15;
-  // const rulerHeight = 30;
 
   // reruns everytime initSeq changes, which happens when genome form is updated
   // and fullSeq and everything gets reset
@@ -577,7 +689,25 @@ function App() {
       const startBufferSeq = fullSeq.current.slice(startSliceStart, startSliceEnd);
       const endBufferSeq = fullSeq.current.slice(endSliceStart, endSliceEnd);
 
+      // separate motif names and colors from the dictionary
+      const motifNameColorDict = puffinConfig.current.motifNameColorDict;
+      const motifNames = [];
+      const motifColors = [];
+
+      for (const entry of motifNameColorDict) {
+        const [name] = Object.keys(entry); const [color] = Object.values(entry);
+        motifNames.push(name); motifColors.push(color);
+      }
+
+      const scaledThreshold = puffinConfig.current.scaledThreshold;
+      const colorHslArr = motifColors.map(hex => hexToHsl(hex));
+
       const outputs = await runInference(viewSeq);
+      const { tooltips, annoColors } = await runAnnoProcessing(outputs, viewStart, viewEnd, strand, colorHslArr, scaledThreshold, scaledAnnoScores, motifNames);
+
+      setToolTips(tooltips);
+      setAnnoColors(annoColors);
+
       console.log('init plot, run infernce for view sequence and left righ buffer');
       if (outputs) {
         const plotData = getPlotData(outputs, boxStart.current, boxEnd.current);
@@ -590,7 +720,6 @@ function App() {
           axisLayout[`xaxis${i + 1}`] = xaxisLayout;
         }
         setPlotLayout({
-          // title: 'Puffin Model Plot',
           ...axisLayout,
           height: plotDivHeight,
           grid: puffinConfig.current.grid,
@@ -622,13 +751,12 @@ function App() {
   }, [seqInited, isPuffinSessionReady]);
 
   const getPlotLinePercentage = (commonScrollPercent) => {
-    const percent = (commonScrollPercent * (boxSeqLen - viewSeqLen.current) + viewSeqLen.current/2) / boxSeqLen;
+    const percent = (commonScrollPercent * (boxSeqLen - viewSeqLen.current) + viewSeqLen.current / 2) / boxSeqLen;
     // adjust for left margin
     const fullLen = boxWidth.current - 2 * plotLeftMargin;
-    const adjustedPercent = (plotLeftMargin + percent*fullLen) / boxWidth.current;
+    const adjustedPercent = (plotLeftMargin + percent * fullLen) / boxWidth.current;
     return adjustedPercent * 100;
   };
-
 
   // tracking these values
   const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine };
@@ -645,7 +773,6 @@ function App() {
       }
     }
   }, [viewCoords]);
-
 
   const handleMouseDownResize = (e) => {
     e.preventDefault();
@@ -751,7 +878,9 @@ function App() {
                 {boxSeq
                   ? boxSeq.split("").map((char, index) => (
                     <Tippy content={toolTips[index]} key={index}>
-                      <span style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }} >
+                      <span
+                        style={{ backgroundColor: annoColors[index] }}
+                      >
                         {char}
                       </span>
                     </Tippy>
@@ -791,12 +920,12 @@ function App() {
                 />
                 <div className="peer h-6 w-11 rounded-full border bg-slate-200 after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-sky-800 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-green-300"></div>
               </label>
-              <span className="text-gray-700 font-medium">Central Line</span>
+              <span className="text-gray-700 font-medium">Helper Line</span>
               <label className="relative inline-flex cursor-pointer items-center">
                 <input
                   type="checkbox"
                   checked={showCentralLine}
-                  onChange={()=>{setShowCentralLine(!showCentralLine);}}
+                  onChange={() => { setShowCentralLine(!showCentralLine); }}
                   className="peer sr-only"
                 />
                 <div className="peer h-6 w-11 rounded-full border bg-slate-200 after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-sky-800 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-green-300"></div>
@@ -845,7 +974,7 @@ function App() {
                       {showCentralLine && <div
                         className="absolute h-full w-[2px] bg-gray-500 opacity-60"
                         style={{
-                          left: is1kMode ? `${ getPlotLinePercentage(commonScrollPercent)}%` : '50%', 
+                          left: is1kMode ? `${getPlotLinePercentage(commonScrollPercent)}%` : '50%',
                           zIndex: 1, // Place below subtitles
                         }}
                       ></div>}
@@ -868,8 +997,6 @@ function App() {
                 )}
               </div>
             </div>
-
-          
 
             {/* Resize line */}
             <div

@@ -1,7 +1,85 @@
 {
     "modelPath": "/puffinFantomCage.onnx",
+    "annoModelPath": "/max_index.onnx",
     "puffinOffset": 325,
     "title": "Puffin Fantom Cage",
+    "annoInputs": [
+        "motif1sc",
+        "motif2sc",
+        "motif3sc",
+        "motif4sc",
+        "motif5sc",
+        "motif6sc",
+        "motif7sc",
+        "motif8sc",
+        "motif9sc",
+        "motif10sc",
+        "motif11sc",
+        "motif12sc",
+        "motif13sc",
+        "motif14sc",
+        "motif15sc",
+        "motif16sc",
+        "motif17sc",
+        "motif18sc"
+    ],
+    "scaledThreshold": 0.05,
+    "motifNameColorDict": [
+        {
+            "YY1+": "#1F77B4"
+        },
+        {
+            "TATA+": "#E41A1C"
+        },
+        {
+            "U1 snRNP+": "#9F9F9F"
+        },
+        {
+            "YY1-": "#c2d5e8"
+        },
+        {
+            "ETS+": "#19d3f3"
+        },
+        {
+            "NFY+": "#00CC96"
+        },
+        {
+            "ETS-": "#19e4f3"
+        },
+        {
+            "NFY-": "#00cc5f"
+        },
+        {
+            "CREB+": "#FF6692"
+        },
+        {
+            "CREB-": "#ff66c2"
+        },
+        {
+            "ZNF143+": "#17a4cf"
+        },
+        {
+            "SP+": "#FF7F0E"
+        },
+        {
+            "SP-": "#ff930e"
+        },
+        {
+            "NRF1-": "#b663fa"
+        },
+        {
+            "NRF1+": "#AB63FA"
+        },
+        {
+            "ZNF143-": "#17BECF"
+        },
+        {
+            "TATA-": "#ffc6ba"
+        },
+        {
+            "U1 snRNP-": "#CFCFCF"
+        }
+    ],
     "grid": {
         "rows": 4,
         "columns": 1,
