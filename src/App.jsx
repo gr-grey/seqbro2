@@ -14,7 +14,7 @@ function App() {
   const [genome, setGenome] = useState("hg38");
   const [chromosome, setChromosome] = useState("chr7");
   const [coordinate, setCoordinate] = useState(5530600);
-  const [strand, setStrand] = useState('-');
+  const [strand, setStrand] = useState('+');
   const [gene, setGene] = useState('ACTB');
 
   // constants
@@ -104,8 +104,18 @@ function App() {
   const [toolTips, setToolTips] = useState([]);
   // background color for motifs
   const [annoColors, setAnnoColors] = useState([]);
-  // const colorThreshold = 0.05;
-  const scaledAnnoScores = useRef([]);
+  // const scaledAnnoScores = useRef([]);
+  // start and end coords of full tooltips list and annoScore list
+  const annoFullStart = useRef(null);
+  const annoFullEnd = useRef(null);
+  const fullTooltips = useRef([]);
+  const fullAnnoColors = useRef([]);
+
+  const colorArrInHsl = useRef([]);
+  const motifNameArr = useRef([]);
+  const scaledAnnoScoresThreshold = useRef(null);
+  // const fullScaledAnnoScores = useRef([]);
+
 
   useEffect(() => {
     const loadModelAndConfig = async () => {
@@ -158,7 +168,7 @@ function App() {
 
   // get indices for slicing the fullseq and get substring
   // with genomic coordinates, with strand consideration
-  const getSliceIndicesFromCoords = (fullStart, fullEnd, subStart, subEnd) => {
+  const getSliceIndicesFromCoords = (fullStart, fullEnd, subStart, subEnd, strand) => {
     if (strand === '+') {
       return [subStart - fullStart, subEnd - fullStart];
     } else {
@@ -183,7 +193,7 @@ function App() {
       boxEnd.current = box_end;
       // update sequence
       fullSeq.current = seq;
-      const [slice_start, slice_end] = getSliceIndicesFromCoords(full_start, full_end, box_start, box_end);
+      const [slice_start, slice_end] = getSliceIndicesFromCoords(full_start, full_end, box_start, box_end, strand);
       setBoxSeq(seq.slice(slice_start, slice_end));
 
       setTimeout(() => {
@@ -253,7 +263,6 @@ function App() {
   // update scroll and client width upon resizing
   useEffect(() => {
     const observer = new ResizeObserver(() => { updateSeqBoxWidths(); });
-
     if (seqBoxRef.current) { observer.observe(seqBoxRef.current); }
 
     return () => {
@@ -309,7 +318,7 @@ function App() {
       updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
     }
 
-    [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, newBoxStart, newBoxEnd);
+    [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, newBoxStart, newBoxEnd, strand);
     return { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq };
   };
 
@@ -322,24 +331,46 @@ function App() {
   const updatePlotBuffers = async (direction, newBoxStart, newBoxEnd) => {
     let newStartBuffer, newViewData, newEndBuffer;
     if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
-      // shift every thing to left by 500
+      // shift every thing to smaller by 500
       const [start, end] = [newBoxStart - boxSeqHalfLen, newBoxEnd - boxSeqHalfLen];
-      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
+      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end, strand);
       // run inference and get data
       const outputs = await runInference(fullSeq.current.slice(sliceStart - puffinConfig.current.puffinOffset, sliceEnd + puffinConfig.current.puffinOffset));
       newStartBuffer = getPlotData(outputs, start, end);
       newViewData = plotDataStartBuffer.current;
       newEndBuffer = plotDataView.current;
 
+      //anno update, plus strand: left, prepend, minus strand: right, append
+      const [annoSliceStart, annoSliceEnd] = strand === '+' ? [0, boxSeqHalfLen] : [boxSeqHalfLen, boxSeqLen];
+      const [newToolTips, newAnnoColors] = await runAnnoProcessing(outputs, start, end, annoSliceStart, annoSliceEnd, strand, colorArrInHsl.current, scaledAnnoScoresThreshold.current, motifNameArr.current);
+      strand === '+' ?
+        fullTooltips.current = newToolTips.concat(fullTooltips.current)
+        : fullTooltips.current = fullTooltips.current.concat(newToolTips);
+      strand === '+' ?
+        fullAnnoColors.current = newAnnoColors.concat(fullAnnoColors.current)
+        : fullAnnoColors.current = fullAnnoColors.current.concat(newAnnoColors);
+      annoFullStart.current -= boxSeqHalfLen;
+
     } else {
-      // shift every thing right by 500
+      // shift every thing bigger by 500
       const [start, end] = [newBoxStart + boxSeqHalfLen, newBoxEnd + boxSeqHalfLen];
-      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end);
+      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end, strand);
       // run inference and get data
       const outputs = await runInference(fullSeq.current.slice(sliceStart - puffinConfig.current.puffinOffset, sliceEnd + puffinConfig.current.puffinOffset));
       newStartBuffer = plotDataView.current;
       newViewData = plotDataEndBuffer.current;
       newEndBuffer = getPlotData(outputs, start, end);
+
+      //anno update, coords all get bigger; plus strand: right, append, minus strand: left, prepend
+      const [annoSliceStart, annoSliceEnd] = strand === '-' ? [0, boxSeqHalfLen] : [boxSeqHalfLen, boxSeqLen];
+      const [newToolTips, newAnnoColors] = await runAnnoProcessing(outputs, start, end, annoSliceStart, annoSliceEnd, strand, colorArrInHsl.current, scaledAnnoScoresThreshold.current, motifNameArr.current);
+      strand === '-' ? // prepend for minus strand
+        fullTooltips.current = newToolTips.concat(fullTooltips.current)
+        : fullTooltips.current = fullTooltips.current.concat(newToolTips);
+      strand === '-' ?
+        fullAnnoColors.current = newAnnoColors.concat(fullAnnoColors.current)
+        : fullAnnoColors.current = fullAnnoColors.current.concat(newAnnoColors);
+      annoFullEnd.current += boxSeqHalfLen;
     }
     // udpate reference
     plotDataStartBuffer.current = newStartBuffer;
@@ -363,6 +394,11 @@ function App() {
     if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
       setPlotData(plotDataStartBuffer.current);
     } else { setPlotData(plotDataEndBuffer.current); }
+
+    // update tooltips
+    const [annoSliceStart, annoSliceEnd] = getSliceIndicesFromCoords(annoFullStart.current, annoFullEnd.current, newBoxStart, newBoxEnd, strand);
+    setToolTips(fullTooltips.current.slice(annoSliceStart, annoSliceEnd));
+    setAnnoColors(fullAnnoColors.current.slice(annoSliceStart, annoSliceEnd));
 
     // first update display, then update sequence (if needed)
     // then update plot buffer - always
@@ -537,7 +573,7 @@ function App() {
   const hslToCss = (h, s, l) => `hsl(${h}, ${s}%, ${l}%)`;
 
   // Updated getToolTips function
-  const annoSetup = (start, end, strand, maxIndices, maxValues, maxAll, colorHslArr, colorThreshold, scaledAnnoScoresRef, motifNames) => {
+  const annoSetup = (start, end, strand, maxIndices, maxValues, maxAll, colorHslArr, colorThreshold, motifNames) => {
     // Reverse range if strand is '-'
     const coordinates = strand === '-' ? range(end, start, -1) : range(start, end);
 
@@ -574,29 +610,32 @@ function App() {
     });
 
     // Update the scaled annotation scores ref
-    scaledAnnoScoresRef.current = scaledAnnoScores;
+    // scaledAnnoScoresRef.current = scaledAnnoScores;
 
     // Return tooltips and annotation colors
     return { tooltips, annoColors };
   };
 
   // use inference results for annotations
-  const runAnnoProcessing = async (results, start, end, strand, colorHslArr, colorThreshold, scaledAnnoScoresRef, motifNames) => {
+  // when udpate, we slice left or right half of the result extend it to the current array
+  const runAnnoProcessing = async (results, start, end, sliceStart, sliceEnd, strand, colorHslArr, colorThreshold, motifNames) => {
+    // result, start, end comes from inference; sliceStart sliceEnd tells us where to slice to avoid rerunning existing sequences
     try {
       // Collect motif scores
       const motifScores = [];
 
       for (const key of puffinConfig.current.annoInputs) {
         const tensor = results[key]; // Access the tensor using the key
-        if (!tensor || tensor.data.length !== 1000) {
+        if (!tensor || tensor.data.length !== 1000) { // inference output has 1000 chars
           throw new Error(`Invalid tensor data for ${key}`);
         }
+        // slice out part of the results, inferece of left and right buffers are redundant
         motifScores.push(Array.from(tensor.data)); // Convert tensor data to an array
       }
 
       // Flatten and create input tensor
       const flatMotifScores = motifScores.flat();
-      const stackedTensor = new ort.Tensor('float32', flatMotifScores, [18, 1000]);
+      const stackedTensor = new ort.Tensor('float32', flatMotifScores, [puffinConfig.current.annoInputs.length, end - start]);
 
       // Run the post-processing model
       const feeds = { motif_scores: stackedTensor };
@@ -606,9 +645,9 @@ function App() {
       const maxIndices = outputs.max_indices.data;
       const maxAll = outputs.max_all.data[0];
 
-      const { tooltips, annoColors } = annoSetup(start, end, strand, maxIndices, maxValues, maxAll, colorHslArr, colorThreshold, scaledAnnoScoresRef, motifNames)
+      const { tooltips, annoColors } = annoSetup(start, end, strand, maxIndices, maxValues, maxAll, colorHslArr, colorThreshold, motifNames)
 
-      return { tooltips, annoColors };
+      return [tooltips.slice(sliceStart, sliceEnd), annoColors.slice(sliceStart, sliceEnd)];
 
     } catch (error) {
       console.error("Error during post-processing:", error);
@@ -676,14 +715,14 @@ function App() {
   // and fullSeq and everything gets reset
   useEffect(() => {
     const initPlot = async () => {
-      // absolute coordinates 
+      // absolute coordinates, here view is the viewing chunk (vs buffer chunks), not just the viewport (viewLen)
       const [viewStart, viewEnd] = [boxStart.current, boxEnd.current];
       const [startBufferStart, startBufferEnd] = [viewStart - boxSeqHalfLen, viewEnd - boxSeqHalfLen];
       const [endBufferStart, endBufferEnd] = [viewStart + boxSeqHalfLen, viewEnd + boxSeqHalfLen];
       // slicing coords
-      const [viewSliceStart, viewSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, viewStart - puffinConfig.current.puffinOffset, viewEnd + puffinConfig.current.puffinOffset);
-      const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, startBufferStart - puffinConfig.current.puffinOffset, startBufferEnd + puffinConfig.current.puffinOffset);
-      const [endSliceStart, endSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, endBufferStart - puffinConfig.current.puffinOffset, endBufferEnd + puffinConfig.current.puffinOffset);
+      const [viewSliceStart, viewSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, viewStart - puffinConfig.current.puffinOffset, viewEnd + puffinConfig.current.puffinOffset, strand);
+      const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, startBufferStart - puffinConfig.current.puffinOffset, startBufferEnd + puffinConfig.current.puffinOffset, strand);
+      const [endSliceStart, endSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, endBufferStart - puffinConfig.current.puffinOffset, endBufferEnd + puffinConfig.current.puffinOffset, strand);
 
       const viewSeq = fullSeq.current.slice(viewSliceStart, viewSliceEnd);
       const startBufferSeq = fullSeq.current.slice(startSliceStart, startSliceEnd);
@@ -702,8 +741,11 @@ function App() {
       const scaledThreshold = puffinConfig.current.scaledThreshold;
       const colorHslArr = motifColors.map(hex => hexToHsl(hex));
 
+      const annoSliceStart = 0;
+      const annoSliceEnd = 1000; // for viewing sequence we get full annos
       const outputs = await runInference(viewSeq);
-      const { tooltips, annoColors } = await runAnnoProcessing(outputs, viewStart, viewEnd, strand, colorHslArr, scaledThreshold, scaledAnnoScores, motifNames);
+      // slice half of the outputs/ results
+      const [tooltips, annoColors] = await runAnnoProcessing(outputs, viewStart, viewEnd, annoSliceStart, annoSliceEnd, strand, colorHslArr, scaledThreshold, motifNames);
 
       setToolTips(tooltips);
       setAnnoColors(annoColors);
@@ -737,6 +779,26 @@ function App() {
       plotDataStartBuffer.current = getPlotData(startBufferOutputs, startBufferStart, startBufferEnd);
       plotDataEndBuffer.current = getPlotData(endBufferOutputs, endBufferStart, endBufferEnd);
 
+      // get tooltips for buffers too
+      // start buffer, take the part that's not overlapping, goes from bufferStart to viewStart, plus strand: first half [0, 500], minus strand: second half [500, 1000]
+      const [startBufferSliceStart, startBufferSliceEnd] = strand === '+' ? [0, boxSeqHalfLen] : [boxSeqHalfLen, boxSeqLen];
+      const [startBufferToolTips, startBufferAnnoColors] = await runAnnoProcessing(startBufferOutputs, startBufferStart, startBufferEnd, startBufferSliceStart, startBufferSliceEnd, strand, colorHslArr, scaledThreshold, motifNames);
+      const [endBufferSliceStart, endBufferSliceEnd] = strand === '+' ? [boxSeqHalfLen, boxSeqLen] : [0, boxSeqHalfLen];
+      const [endBufferToolTips, endBufferAnnoColors] = await runAnnoProcessing(endBufferOutputs, endBufferStart, endBufferEnd, endBufferSliceStart, endBufferSliceEnd, strand, colorHslArr, scaledThreshold, motifNames);
+
+      // udpate references:
+      annoFullStart.current = startBufferStart; annoFullEnd.current = endBufferEnd;
+      fullTooltips.current = strand === '+' ? startBufferToolTips.concat(tooltips, endBufferToolTips) : endBufferToolTips.concat(tooltips, startBufferToolTips);
+      fullAnnoColors.current = strand === '+' ? startBufferAnnoColors.concat(annoColors, endBufferAnnoColors) : endBufferAnnoColors.concat(annoColors, endBufferAnnoColors);
+
+      colorArrInHsl.current = colorHslArr;
+      motifNameArr.current = motifNames;
+      scaledAnnoScoresThreshold.current = scaledThreshold;
+
+      // console.log('start', startBufferToolTips[0], startBufferToolTips[499]);
+      // console.log('mid', tooltips[0], tooltips[999]);
+      // console.log('end', endBufferToolTips[0], endBufferToolTips[499]);
+
       if (!is1kMode && plotRef.current && scrollLeftMax.current) {
         // manually scroll to halfway
         const middlePoint = 0.500 + 1 / boxSeqLen / 2;
@@ -759,7 +821,7 @@ function App() {
   };
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, annoFullStart, annoFullEnd, fullTooltips, fullAnnoColors, };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -1006,8 +1068,6 @@ function App() {
           </div>
 
           <DebugPanel {...debugVars} />
-          {/* Center line for debug */}
-          {/* <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-blue-500"></div> */}
         </div>
 
       </div>

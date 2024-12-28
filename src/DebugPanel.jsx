@@ -1,12 +1,17 @@
 import React from "react";
 
-const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine }) => {
+const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, annoFullStart, annoFullEnd, fullTooltips, fullAnnoColors, }) => {
 
     return (
         <>
             <div className="border-t border-gray-200 mt-2">
                 <h1>Debug:</h1>
                 <ul className="space-y-2 text-sm">
+                    <li><span> --------Annotation tracking---------</span></li>
+                    <li><span>anno full start</span> {`${annoFullStart.current}`}</li>
+                    <li><span>anno full End</span> {`${annoFullEnd.current}`}</li>
+                    <li><span>full tooltip len</span> { `${fullTooltips.current.length}`}</li>
+                    <li><span>Anno colors len</span> { `${fullAnnoColors.current.length}`}</li>
                     <li><span> --------Plotly plot tracking---------</span></li>
                     <li><span>Central line</span> {`${showCentralLine}`}</li>
                     <li><span> plot div height </span> {plotDivHeight}</li>
