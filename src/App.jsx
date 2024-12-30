@@ -65,6 +65,10 @@ function App() {
   // Track if sequence is being replaced
   const [isReplacing, setIsReplacing] = useState(false);
   const [seqInited, setSeqInited] = useState(false);
+  // updating stuff in the background
+  // if we are still setting the background sequence and buffers
+  // do not trigger replacing activities
+  const [isUpdatingBack, setIsUpdatingBack] = useState(false);
 
   const [commonScrollPercent, setCommonScrollPercent] = useState(0);
 
@@ -101,7 +105,7 @@ function App() {
   const [showCentralLine, setShowCentralLine] = useState(true);
 
   // annotation colors, tooltips
-  const [toolTips, setToolTips] = useState([]);
+  const [tooltips, setTooltips] = useState([]);
   // background color for motifs
   const [annoColors, setAnnoColors] = useState([]);
   const tooltipsStartBuffer = useRef([]);
@@ -340,17 +344,16 @@ function App() {
       newEndBuffer = plotDataView.current;
 
       // anno update
-      console.log('update plotbuffer', motifNameArr.current);
       const [newTooltips, newAnnoColors] = await runAnnoProcessing(outputs, start, end, strand, colorArrInHsl.current, scaledAnnoScoresThreshold.current, motifNameArr.current);
-      
+
       newTooltipsStartBuffer = newTooltips;
       newTooltipsView = tooltipsStartBuffer.current;
-      newTooltipsEndBuffer  = tooltipsView.current;
-      
+      newTooltipsEndBuffer = tooltipsView.current;
+
       newAnnoColorsStartBuffer = newAnnoColors;
       newAnnoColorsView = annoColorsStartBuffer.current;
-      newAnnoColorsEndBuffer  = annoColorsView.current;
-      
+      newAnnoColorsEndBuffer = annoColorsView.current;
+
     } else {
       // shift every thing bigger by 500
       const [start, end] = [newBoxStart + boxSeqHalfLen, newBoxEnd + boxSeqHalfLen];
@@ -360,14 +363,14 @@ function App() {
       newStartBuffer = plotDataView.current;
       newViewData = plotDataEndBuffer.current;
       newEndBuffer = getPlotData(outputs, start, end);
-      
+
       // anno update
       const [newTooltips, newAnnoColors] = await runAnnoProcessing(outputs, start, end, strand, colorArrInHsl.current, scaledAnnoScoresThreshold.current, motifNameArr.current);
 
       newTooltipsStartBuffer = tooltipsView.current;
       newTooltipsView = tooltipsEndBuffer.current;
       newTooltipsEndBuffer = newTooltips;
-      
+
       newAnnoColorsStartBuffer = annoColorsView.current;
       newAnnoColorsView = annoColorsEndBuffer.current;
       newAnnoColorsEndBuffer = newAnnoColors;
@@ -393,45 +396,60 @@ function App() {
     const seqBoxElem = seqBoxRef.current;
     const plotElem = plotRef.current;
     const full_w = boxSeqFullWidth.current;
+
+    // Do not proceed if background updates are in progress
+    if (isUpdatingBack) return;
+
     setIsReplacing(true);
-    const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } =
-      getSwapSeqCoords(direction);
+    const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords(direction);
+
     // swap with new sequence in seqbox
     setBoxSeq(fullSeq.current.slice(sliceStart, sliceEnd));
-
     // swap with plot and annos
     if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
       setPlotData(plotDataStartBuffer.current);
-      setToolTips(tooltipsStartBuffer.current);
+      setTooltips(tooltipsStartBuffer.current);
       setAnnoColors(annoColorsStartBuffer.current);
     } else {
       setPlotData(plotDataEndBuffer.current);
-      setToolTips(tooltipsEndBuffer.current);
+      setTooltips(tooltipsEndBuffer.current);
       setAnnoColors(annoColorsEndBuffer.current);
     }
 
     // first update display, then update sequence (if needed)
     // then update plot buffer and annos - always
+    // Update display and buffers asynchronously
     setTimeout(async () => {
-      // scroll by half width to keep the same sequence in display
+      // Scroll by half width to keep the same sequence in display
+      const scrollOffset = 0.5 * full_w;
       if (direction === "left") {
-        seqBoxElem.scrollLeft += 0.5 * full_w;
-        plotElem.scrollLeft += 0.5 * full_w;
+        seqBoxElem.scrollLeft += scrollOffset;
+        plotElem.scrollLeft += scrollOffset;
       } else {
-        seqBoxElem.scrollLeft -= 0.5 * full_w;
-        plotElem.scrollLeft -= 0.5 * full_w;
+        seqBoxElem.scrollLeft -= scrollOffset;
+        plotElem.scrollLeft -= scrollOffset;
       }
 
       setIsReplacing(false);
       boxStart.current = newBoxStart;
       boxEnd.current = newBoxEnd;
 
-      // Update the full sequence if needed
-      if (updateSeq) { await updateFullSeq(direction); }
-
-      // Once full sequence is updated, update plot buffers
-      await updatePlotBuffers(direction, newBoxStart, newBoxEnd);
-
+      // If sequence update is needed, ensure it's safe to update
+      if (updateSeq) {
+        setIsUpdatingBack(true);
+        try {
+          await updateFullSeq(direction);
+          await updatePlotBuffers(direction, newBoxStart, newBoxEnd);
+        } finally {
+          setIsUpdatingBack(false); // Ensure the flag is cleared
+        }
+      } else {
+        // Even if no sequence update is needed, ensure plot buffers are updated
+        setIsUpdatingBack(true);
+        try {
+          await updatePlotBuffers(direction, newBoxStart, newBoxEnd);
+        } finally { setIsUpdatingBack(false); }
+      }
     }, 10);
   };
 
@@ -444,8 +462,10 @@ function App() {
     setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i)));
     // udpate reference tracker
     scrollLeft.current = scroll_left;
-    // syncScrollPercent.current = scrollPercent;
     setCommonScrollPercent(scrollPercent);
+
+    // Disable infinite scrolling when background updates are in progress
+    if (isUpdatingBack) return;
 
     // disable infinite scrolling when in 1k mode
     if (!is1kMode && scrollPercent < 0.05 && !isReplacing) {
@@ -581,7 +601,7 @@ function App() {
   // Helper: Convert HSL to CSS String
   const hslToCss = (h, s, l) => `hsl(${h}, ${s}%, ${l}%)`;
 
-  // Updated getToolTips function
+  // Updated getTooltips function
   const annoSetup = (start, end, strand, maxIndices, maxValues, maxAll, colorHslArr, colorThreshold, motifNames) => {
     // Reverse range if strand is '-'
     const coordinates = strand === '-' ? range(end, start, -1) : range(start, end);
@@ -627,7 +647,6 @@ function App() {
   const runAnnoProcessing = async (results, start, end, strand, colorHslArr, colorThreshold, motifNames) => {
     // remove slicing test
     try {
-      console.log('in anno proc', motifNames);
       // Collect motif scores
       const motifScores = [];
 
@@ -751,7 +770,7 @@ function App() {
       const outputs = await runInference(viewSeq);
       const [tooltips, annoColors] = await runAnnoProcessing(outputs, viewStart, viewEnd, strand, colorHslArr, scaledThreshold, motifNames);
 
-      setToolTips(tooltips);
+      setTooltips(tooltips);
       setAnnoColors(annoColors);
 
       console.log('init plot, run infernce for view sequence and left righ buffer');
@@ -784,18 +803,18 @@ function App() {
       plotDataEndBuffer.current = getPlotData(endBufferOutputs, endBufferStart, endBufferEnd);
 
       // get tooltips for buffers too
-      const [startBufferToolTips, startBufferAnnoColors] = await runAnnoProcessing(startBufferOutputs, startBufferStart, startBufferEnd, strand, colorHslArr, scaledThreshold, motifNames);
-      const [endBufferToolTips, endBufferAnnoColors] = await runAnnoProcessing(endBufferOutputs, endBufferStart, endBufferEnd, strand, colorHslArr, scaledThreshold, motifNames);
+      const [starBufferTooltips, startBufferAnnoColors] = await runAnnoProcessing(startBufferOutputs, startBufferStart, startBufferEnd, strand, colorHslArr, scaledThreshold, motifNames);
+      const [endBufferTooltips, endBufferAnnoColors] = await runAnnoProcessing(endBufferOutputs, endBufferStart, endBufferEnd, strand, colorHslArr, scaledThreshold, motifNames);
 
       colorArrInHsl.current = colorHslArr;
       motifNameArr.current = motifNames;
       scaledAnnoScoresThreshold.current = scaledThreshold;
       // anno and plot share the same coords
-      tooltipsStartBuffer.current = startBufferToolTips;
+      tooltipsStartBuffer.current = starBufferTooltips;
       annoColorsStartBuffer.current = startBufferAnnoColors;
       tooltipsView.current = tooltips;
       annoColorsView.current = annoColors;
-      tooltipsEndBuffer.current = endBufferToolTips;
+      tooltipsEndBuffer.current = endBufferTooltips;
       annoColorsEndBuffer.current = endBufferAnnoColors;
 
       if (!is1kMode && plotRef.current && scrollLeftMax.current) {
@@ -820,7 +839,7 @@ function App() {
   };
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, toolTips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, };
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -938,19 +957,19 @@ function App() {
                 ></div>
                 {boxSeq
                   ? boxSeq.split("").map((char, index) => (
-                    <Tippy content={toolTips[index]} key={index}>
+                    <Tippy content={tooltips[index]} key={index}>
                       <span
                         style={{ backgroundColor: annoColors[index] }}
                       >
                         {char}
                       </span>
                     </Tippy>
-                    // vanila tooltips
+                    // vanilla tooltips
                     // <span
                     //   key={index}
                     //   className="inline-block"
-                    //   title={toolTips[index]} // Native tooltip with coordinate
-                    //   style={{ backgroundColor: getBackgroundColor(index, boxSeq.length) }}
+                    //   title={tooltips[index]} // Native tooltip with coordinate
+                    //   style={{ backgroundColor: annoColor[index] }}
                     // >
                     //   {char}
                     // </span>
