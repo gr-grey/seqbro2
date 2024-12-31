@@ -119,6 +119,9 @@ function App() {
   const motifNameArr = useRef([]);
   const scaledAnnoScoresThreshold = useRef(null);
 
+  // squeeze 1k seq, set width so all 1k fits in
+  const [oneKCharWidth, setOneKCharWidth] = useState(null);
+
 
   useEffect(() => {
     const loadModelAndConfig = async () => {
@@ -232,6 +235,9 @@ function App() {
 
       // init view coords on tick/ ruler
       setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i)));
+
+      // set oneK seq character width
+      setOneKCharWidth(view_w / boxSeqLen);
     }
   }, [seqInited]);
 
@@ -260,6 +266,9 @@ function App() {
 
       // update plot widths for 1k view
       if (is1kMode) { relayout({ width: box_w }); }
+
+      // update character width in 1k seq box
+      setOneKCharWidth(box_w / boxSeqLen);
     }
   };
 
@@ -838,6 +847,12 @@ function App() {
     return adjustedPercent * 100;
   };
 
+  const getBoxLinePercentage = (commonScrollPercent) => {
+    const midPercent = (commonScrollPercent * (boxSeqLen - viewSeqLen.current) + viewSeqLen.current / 2) / boxSeqLen;
+    const width = viewSeqLen.current / 2 / boxSeqLen;
+    return [(midPercent - width) * 100, midPercent * 100, width * 2 * 100];
+  }
+
   // tracking these values
   const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, };
 
@@ -944,13 +959,13 @@ function App() {
 
             <div className='relative'>
               <div
-                className="sequence-box bg-white border border-gray-300 overflow-x-auto font-mono"
+                className="sequence-box bg-white border border-blue-500 overflow-x-auto font-mono"
                 ref={seqBoxRef}
                 onScroll={handleSeqBoxScroll}
                 style={{ whiteSpace: "nowrap" }}
                 onMouseEnter={handleMouseEnterSeqBox}
               >
-                {/* Red center line in sequence box */}
+                {/* Vertical center line in sequence box */}
                 <div
                   className="absolute top-0 bottom-0 w-[2px] bg-gray-500"
                   style={{ left: "50%" }}
@@ -969,14 +984,66 @@ function App() {
                     //   key={index}
                     //   className="inline-block"
                     //   title={tooltips[index]} // Native tooltip with coordinate
-                    //   style={{ backgroundColor: annoColor[index] }}
+                    //   style={{ backgroundColor: annoColors[index] }}
                     // >
                     //   {char}
                     // </span>
                   ))
                   : "Loading...."}
               </div>
+
             </div>
+            {/* squeeze all 1k sequences */}
+            <div
+              className="bg-white border border-gray-300 overflow-x-auto font-mono relative"
+              style={{
+                whiteSpace: "nowrap",
+                overflow: "hidden", // Disable user scrolling
+              }}
+            >
+              {/* Full Box */}
+              <div
+                className="absolute top-1 bottom-1 border-[1px] border-blue-500"
+                style={{
+                  left: `${getBoxLinePercentage(commonScrollPercent)[0]}%`, // Left edge
+                  width: `${getBoxLinePercentage(commonScrollPercent)[2]}%`, // Width of the box
+                }}
+              ></div>
+              {/* Middle Vertical Line */}
+              <div
+                className="absolute w-[1px] bg-gray-500 top-0 bottom-0"
+                style={{ left: `${getBoxLinePercentage(commonScrollPercent)[1]}%`, }}
+              ></div>
+              {boxSeq && oneKCharWidth
+                ? boxSeq.split("").map((char, index) => (
+                  // <Tippy content={`${tooltips[index]}`} key={index}>
+                  //   <span style={{
+                  //     backgroundColor: annoColors[index],
+                  //     display: "inline-block",
+                  //     width: `${oneKCharWidth}px`,
+                  //     height: "10px",
+                  //   }} >
+                  //     {" "}
+                  //   </span>
+                  // </Tippy>
+                  // vanilla tooltips
+                  <span
+                    key={index}
+                    className="inline-block"
+                    title={char + ' ' + tooltips[index]} // Native tooltip with coordinate
+                    style={{
+                      backgroundColor: annoColors[index],
+                      width: `${oneKCharWidth}px`,
+                      height: "10px",
+                    }}
+                  >
+                    {" "}
+                  </span>
+                ))
+                : "Loading...."}
+            </div>
+
+
 
           </div>
 
