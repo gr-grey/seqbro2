@@ -998,7 +998,20 @@ function App() {
               className="bg-white border border-gray-300 overflow-x-auto font-mono relative"
               style={{
                 whiteSpace: "nowrap",
-                overflow: "hidden", // Disable user scrolling
+                // overflow: "hidden", // Disable user scrolling
+              }}
+              onClick={(e) => {
+                // Get the click position relative to the div
+                const rect = e.currentTarget.getBoundingClientRect();
+                const clickX = e.clientX - rect.left; // Click X position within the div
+                const divWidth = rect.width; // Width of the div
+                // console.log('div',divWidth);
+            
+                // Calculate new commonScrollPercent
+                const newScrollPercent = clickX / divWidth;
+                const newLeftPercent = newScrollPercent - viewSeqLen.current/boxSeqLen/2;
+                // Update the state
+                seqBoxRef.current.scrollLeft = newLeftPercent * boxSeqFullWidth.current;
               }}
             >
               {/* Full Box */}
@@ -1042,9 +1055,6 @@ function App() {
                 ))
                 : "Loading...."}
             </div>
-
-
-
           </div>
 
           <DallianceViewer

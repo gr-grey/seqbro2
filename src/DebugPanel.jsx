@@ -7,6 +7,7 @@ const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent
             <div className="border-t border-gray-200 mt-2">
                 <h1>Debug:</h1>
                 <ul className="space-y-2 text-sm">
+                    <li><span> scroll percent</span> {commonScrollPercent}</li>
                     <li><span> --------Plotly plot tracking---------</span></li>
                     <li><span>Central line</span> {`${showCentralLine}`}</li>
                     <li><span> plot div height </span> {plotDivHeight}</li>
@@ -20,7 +21,6 @@ const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent
                     <li><span> box seq width:</span> {boxSeqFullWidth.current}</li>
                     <li><span> box view width:</span> {boxWidth.current}</li>
                     <li><span> viewSeqLen:</span> {viewSeqLen.current}</li>
-                    <li><span> scroll percent</span> {commonScrollPercent}</li>
                     <li>
                         <span> Full seq Start - End (zero based, exclude last) coordinate:</span>
                         {fullStart.current} - {fullEnd.current}
