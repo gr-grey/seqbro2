@@ -8,6 +8,7 @@ import GenomeForm from './GenomeForm';
 import DallianceViewer from './DallianceViewer';
 import Plot from 'react-plotly.js';
 import useDebounce from './useDebounce';
+import { range, encodeSequence, getViewCoords, fetchSequence, getSliceIndicesFromCoords, hexToHsl, hslToCss, } from './utils';
 
 function App() {
   // get sequence
@@ -21,10 +22,9 @@ function App() {
   // scrollable content sequence len: 1000 characters
   const boxSeqHalfLen = 500;
   const boxSeqLen = 2 * boxSeqHalfLen;
-  // pad 1000 char at a time
-  const paddingLen = 1000;
-  // starting seq len 3k, display middle 1k in box
-  // left and right each has 1k padding
+  const paddingLen = 4000;
+  const fullSeqLenCap = 12000; // len limit for fullseq
+  // starting seq len 4k, display middle 1k in box
   const initHalfLen = 2000;
   const coordTicks = [0.0, 0.5, 1.0];
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
@@ -69,7 +69,6 @@ function App() {
   // if we are still setting the background sequence and buffers
   // do not trigger replacing activities
   const [isUpdatingBack, setIsUpdatingBack] = useState(false);
-
   const [commonScrollPercent, setCommonScrollPercent] = useState(0);
 
   // toggle 1k full view or local sync view
@@ -81,6 +80,10 @@ function App() {
   const annoSession = useRef(null);
 
   // plotly plot part
+  const [plotDivHeight, setPlotDivHeight] = useState(500);
+  const plotTopMargin = 0;
+  const plotBottomMargin = 15;
+
   const [plotData, setPlotData] = useState(null);
   const [plotLayout, setPlotLayout] = useState(null);
   const plotRef = useRef(null);
@@ -104,6 +107,9 @@ function App() {
   // toggle on and off helper line
   const [showCentralLine, setShowCentralLine] = useState(true);
 
+  // toggle button for showing legend
+  const [showLegend, setShowLegend] = useState(false);
+
   // annotation colors, tooltips
   const [tooltips, setTooltips] = useState([]);
   // background color for motifs
@@ -122,6 +128,7 @@ function App() {
   // squeeze 1k seq, set width so all 1k fits in
   const [oneKCharWidth, setOneKCharWidth] = useState(null);
 
+  const isPlotInited = useRef(null);
 
   useEffect(() => {
     const loadModelAndConfig = async () => {
@@ -142,46 +149,6 @@ function App() {
     loadModelAndConfig();
   }, []);
 
-  // Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
-  const range = (start, stop, step = 1) =>
-    Array.from(
-      { length: Math.ceil((stop - start) / step) },
-      (_, i) => start + i * step,
-    );
-
-  // coords of viewing part of seqbox, left -> right: tick percent 0 -> 1
-  const getViewCoords = (start, scrollChar, clientChar, scrollPercent, tickPercent) => {
-    if (strand === '+') {
-      return Math.floor(start + (scrollChar - clientChar) * scrollPercent + tickPercent * clientChar);
-    } else {
-      return Math.ceil(start + scrollChar - (scrollChar - clientChar) * scrollPercent - tickPercent * clientChar);
-    }
-  };
-
-  // seqstr exclude last char
-  const fetchSequence = async (start, end) => {
-    const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`;
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-      const sequence = data[0]?.data || "";
-      return sequence;
-    } catch (error) {
-      console.error("Failed to fetch sequence: ", error);
-      return "";
-    }
-  };
-
-  // get indices for slicing the fullseq and get substring
-  // with genomic coordinates, with strand consideration
-  const getSliceIndicesFromCoords = (fullStart, fullEnd, subStart, subEnd, strand) => {
-    if (strand === '+') {
-      return [subStart - fullStart, subEnd - fullStart];
-    } else {
-      return [fullEnd - subEnd, fullEnd - subStart];
-    }
-  };
-
   // load initial sequence
   useEffect(() => {
     const init = async () => {
@@ -190,7 +157,7 @@ function App() {
       const full_end = coordinate + initHalfLen;
       const box_start = coordinate - boxSeqHalfLen;
       const box_end = coordinate + boxSeqHalfLen;
-      const seq = await fetchSequence(full_start, full_end);
+      const seq = await fetchSequence(full_start, full_end, genome, chromosome, strand);
 
       // update coords
       fullStart.current = full_start;
@@ -234,7 +201,7 @@ function App() {
       setCommonScrollPercent(middlePoint);
 
       // init view coords on tick/ ruler
-      setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i)));
+      setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i, strand)));
 
       // set oneK seq character width
       setOneKCharWidth(view_w / boxSeqLen);
@@ -253,7 +220,7 @@ function App() {
 
       const viewLen = boxSeqLen / full_w * box_w;
       // coords on tick/ ruler in view port
-      const viewCoords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, scrollPercent, i));
+      const viewCoords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, scrollPercent, i, strand));
       setViewCoords(viewCoords);
 
       // update varaibles
@@ -407,7 +374,7 @@ function App() {
     const full_w = boxSeqFullWidth.current;
 
     // Do not proceed if background updates are in progress
-    if (isUpdatingBack) return;
+    if (isUpdatingBack || isReplacing) return;
 
     setIsReplacing(true);
     const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords(direction);
@@ -468,13 +435,13 @@ function App() {
     const scroll_left = seqElem.scrollLeft;
     const scrollPercent = scroll_left / scrollLeftMax.current;
 
-    setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i)));
+    setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i, strand)));
     // udpate reference tracker
     scrollLeft.current = scroll_left;
     setCommonScrollPercent(scrollPercent);
 
     // Disable infinite scrolling when background updates are in progress
-    if (isUpdatingBack) return;
+    if (isUpdatingBack || isReplacing) return;
 
     // disable infinite scrolling when in 1k mode
     if (!is1kMode && scrollPercent < 0.05 && !isReplacing) {
@@ -502,47 +469,34 @@ function App() {
     let padSeq;
     if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
       const start = fullStart.current;
-      // retrive 1000 (padding len) left to the current starting coord
-      padSeq = await fetchSequence(start - paddingLen, start);
+      // retrive padding len left to the current starting coord
+      padSeq = await fetchSequence(start - paddingLen, start, genome, chromosome, strand);
       fullStart.current = start - paddingLen; // Adjust seqStart
     } else {
       const end = fullEnd.current;
-      padSeq = await fetchSequence(end, end + paddingLen);
+      padSeq = await fetchSequence(end, end + paddingLen, genome, chromosome, strand);
       fullEnd.current = end + paddingLen;
     }
     // update fullSeq
-    if (direction === 'left') { // prepend on left
+    if (direction === 'left') { // Prepend on the left
       fullSeq.current = padSeq + fullSeq.current;
-    } else { // append on right
-      fullSeq.current = fullSeq.current + padSeq;
-    }
-  };
-
-  // // Add background color for beginning, middle and end of sequence for debug
-  // const getBackgroundColor = (index, seqLength) => {
-  //   if (index < boxSeqLen * 0.06) {
-  //     return "yellow"; // First 50 characters
-  //   } else if (index === Math.floor(seqLength / 2)) {
-  //     return "red"; // Middle character
-  //   } else if (index >= seqLength - boxSeqLen * 0.06) {
-  //     return "green"; // Last 50 characters
-  //   }
-  //   return "transparent"; // Default background
-  // };
-
-  // helper function to encode sequence
-  const encodeSequence = (inputSequence) => {
-    const seqEncoded = Array.from(inputSequence).map((char) => {
-      switch (char) {
-        case 'A': return [1, 0, 0, 0];
-        case 'C': return [0, 1, 0, 0];
-        case 'G': return [0, 0, 1, 0];
-        case 'T': return [0, 0, 0, 1];
-        default: return [0, 0, 0, 0];
+      // full seq length limit: keep the left-most 12k characters
+      if (fullSeq.current.length > fullSeqLenCap) {
+        fullSeq.current = fullSeq.current.slice(0, fullSeqLenCap);
+        // adjust coords after chopping
+        strand === '+' ? fullEnd.current = fullStart.current + fullSeqLenCap
+          : fullStart.current = fullEnd.current - fullSeqLenCap;
       }
-    });
-    // transpose seqlen by 4 to 4 by seq_len
-    return seqEncoded[0].map((_, colIndex) => seqEncoded.map(row => row[colIndex]));
+    } else { // Append on the right
+      fullSeq.current = fullSeq.current + padSeq;
+      // full seq length limit: keep the right-most 12k characters
+      if (fullSeq.current.length > fullSeqLenCap) {
+        fullSeq.current = fullSeq.current.slice(-fullSeqLenCap);
+        // adjust coords after chopping
+        strand === '-' ? fullEnd.current = fullStart.current + fullSeqLenCap
+        : fullStart.current = fullEnd.current - fullSeqLenCap;
+      }
+    }
   };
 
   const runInference = async (inputSequence) => {
@@ -565,50 +519,6 @@ function App() {
       return null;
     }
   };
-
-  // Helper function: Convert Hex to RGB
-  const hexToRgb = hex => {
-    const bigint = parseInt(hex.slice(1), 16);
-    const r = (bigint >> 16) & 255;
-    const g = (bigint >> 8) & 255;
-    const b = bigint & 255;
-    return [r, g, b];
-  };
-
-  // Helper: Convert Hex to HSL
-  const hexToHsl = (hex) => {
-    const rgb = hexToRgb(hex); // Convert hex to RGB
-    const [r, g, b] = rgb.map(v => v / 255); // Normalize to [0, 1]
-
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const delta = max - min;
-
-    // Calculate Hue
-    let h = 0;
-    if (delta !== 0) {
-      if (max === r) {
-        h = ((g - b) / delta) % 6;
-      } else if (max === g) {
-        h = (b - r) / delta + 2;
-      } else {
-        h = (r - g) / delta + 4;
-      }
-      h = Math.round(h * 60);
-      if (h < 0) h += 360;
-    }
-
-    // Calculate Lightness
-    const l = (max + min) / 2;
-
-    // Calculate Saturation
-    const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
-
-    return [h, s * 100, l * 100]; // HSL in [0-360, 0-100, 0-100] range
-  };
-
-  // Helper: Convert HSL to CSS String
-  const hslToCss = (h, s, l) => `hsl(${h}, ${s}%, ${l}%)`;
 
   // Updated getTooltips function
   const annoSetup = (start, end, strand, maxIndices, maxValues, maxAll, colorHslArr, colorThreshold, motifNames) => {
@@ -661,7 +571,7 @@ function App() {
 
       for (const key of puffinConfig.current.annoInputs) {
         const tensor = results[key]; // Access the tensor using the key
-        if (!tensor || tensor.data.length !== 1000) { // inference output has 1000 chars
+        if (!tensor || tensor.data.length !== boxSeqLen) { // inference output has same length as seq box
           throw new Error(`Invalid tensor data for ${key}`);
         }
         // slice out part of the results, inferece of left and right buffers are redundant
@@ -733,23 +643,17 @@ function App() {
     }
   };
 
-  // toggle button for showing legend
-  const [showLegend, setShowLegend] = useState(false);
-
   const toggleLegend = () => {
     const newShowLegend = !showLegend;
     setShowLegend(newShowLegend);
     relayout({ showlegend: newShowLegend });
   };
 
-  const [plotDivHeight, setPlotDivHeight] = useState(500);
-  const plotTopMargin = 0;
-  const plotBottomMargin = 15;
-
   // reruns everytime initSeq changes, which happens when genome form is updated
   // and fullSeq and everything gets reset
   useEffect(() => {
     const initPlot = async () => {
+      isPlotInited.current = false;
       // absolute coordinates, here view is the viewing chunk (vs buffer chunks), not just the viewport (viewLen)
       const [viewStart, viewEnd] = [boxStart.current, boxEnd.current];
       const [startBufferStart, startBufferEnd] = [viewStart - boxSeqHalfLen, viewEnd - boxSeqHalfLen];
@@ -759,6 +663,7 @@ function App() {
       const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, startBufferStart - puffinConfig.current.puffinOffset, startBufferEnd + puffinConfig.current.puffinOffset, strand);
       const [endSliceStart, endSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, endBufferStart - puffinConfig.current.puffinOffset, endBufferEnd + puffinConfig.current.puffinOffset, strand);
 
+      // seqs for inferences
       const viewSeq = fullSeq.current.slice(viewSliceStart, viewSliceEnd);
       const startBufferSeq = fullSeq.current.slice(startSliceStart, startSliceEnd);
       const endBufferSeq = fullSeq.current.slice(endSliceStart, endSliceEnd);
@@ -829,15 +734,36 @@ function App() {
       if (!is1kMode && plotRef.current && scrollLeftMax.current) {
         // manually scroll to halfway
         const middlePoint = 0.500 + 1 / boxSeqLen / 2;
-        setTimeout(() => { plotRef.current.scrollLeft = middlePoint * scrollLeftMax.current; }, 10);
+        setTimeout(() => {
+          plotRef.current.scrollLeft = middlePoint * scrollLeftMax.current;
+          isPlotInited.current = true;
+        }, 10);
       }
     };
     // this updates plot whenever sequence gets reinit via form
     if (seqInited && isPuffinSessionReady) {
-
       initPlot();
     }
   }, [seqInited, isPuffinSessionReady]);
+
+  // pad sequences after plot was inited
+  useEffect(() => {
+    const padSequences = async () => {
+      if (isPlotInited.current) {
+        try {
+          // Pad left first
+          await updateFullSeq('left');
+          // Then pad right
+          await updateFullSeq('right');
+          // console.log('full seq len', fullSeq.current.length);
+        } catch (error) {
+          console.error('Error padding sequences:', error);
+        }
+      }
+    };
+
+    padSequences();
+  }, [isPlotInited.current]); // Depend on the reference's value indirectly
 
   const getPlotLinePercentage = (commonScrollPercent) => {
     const percent = (commonScrollPercent * (boxSeqLen - viewSeqLen.current) + viewSeqLen.current / 2) / boxSeqLen;
@@ -1006,10 +932,10 @@ function App() {
                 const clickX = e.clientX - rect.left; // Click X position within the div
                 const divWidth = rect.width; // Width of the div
                 // console.log('div',divWidth);
-            
+
                 // Calculate new commonScrollPercent
                 const newScrollPercent = clickX / divWidth;
-                const newLeftPercent = newScrollPercent - viewSeqLen.current/boxSeqLen/2;
+                const newLeftPercent = newScrollPercent - viewSeqLen.current / boxSeqLen / 2;
                 // Update the state
                 seqBoxRef.current.scrollLeft = newLeftPercent * boxSeqFullWidth.current;
               }}
