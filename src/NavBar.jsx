@@ -1,5 +1,5 @@
 import React from "react";
-import { FaHome, FaEdit, FaQuestionCircle, FaGithub, FaEllipsisV } from "react-icons/fa";
+import { FaHome, FaEdit, FaQuestionCircle, FaGithub, FaEllipsisV, FaBars } from "react-icons/fa";
 import { Link } from "react-router-dom";
 
 const LinkButton = ({ icon: Icon, label, to, isEternal }) => {
@@ -26,12 +26,20 @@ const LinkButton = ({ icon: Icon, label, to, isEternal }) => {
   )
 };
 
-const NavBar = () => {
+const NavBar = ({ isGenomeFormFolded, setIsGenomeFormFolded }) => {
   return (
     <div className="w-full border-b border-gray-300 bg-white mt-2 pb-2">
       <div className="flex items-center justify-between px-4 py-2">
         {/* Left Buttons */}
         <div className="flex space-x-0">
+          {/* Hamburger Button */}
+          <button
+            className="flex items-center space-x-2 border rounded-md border-gray-300 text-gray-700 hover:text-blue-900 focus:outline-none focus:ring focus:ring-blue-300 px-2"
+            onClick={() => setIsGenomeFormFolded(!isGenomeFormFolded)}
+          >
+            <FaBars className="text-md" />  
+            <span>{isGenomeFormFolded ? "Show Genome Form" : "Hide Genome Form"}</span>
+          </button>
           <LinkButton icon={FaHome} label="Home" to="/" />
           <LinkButton icon={FaEdit} label="Edit" to="/edit" />
           <LinkButton icon={FaQuestionCircle} label="Help" to="/help" />
@@ -49,6 +57,5 @@ const NavBar = () => {
     </div>
   );
 };
-
 
 export default NavBar;

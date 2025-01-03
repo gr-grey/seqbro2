@@ -72,7 +72,7 @@ function App() {
   const [commonScrollPercent, setCommonScrollPercent] = useState(0);
 
   // toggle 1k full view or local sync view
-  const [is1kMode, setIs1kMode] = useState(false);
+  const [is1kMode, setIs1kMode] = useState(true);
 
   // global onnx inference session for puffin
   const puffinSession = useRef(null);
@@ -746,24 +746,24 @@ function App() {
     }
   }, [seqInited, isPuffinSessionReady]);
 
-  // pad sequences after plot was inited
-  useEffect(() => {
-    const padSequences = async () => {
-      if (isPlotInited.current) {
-        try {
-          // Pad left first
-          await updateFullSeq('left');
-          // Then pad right
-          await updateFullSeq('right');
-          // console.log('full seq len', fullSeq.current.length);
-        } catch (error) {
-          console.error('Error padding sequences:', error);
-        }
-      }
-    };
+  // // pad sequences after plot was inited
+  // useEffect(() => {
+  //   const padSequences = async () => {
+  //     if (isPlotInited.current) {
+  //       try {
+  //         // Pad left first
+  //         await updateFullSeq('left');
+  //         // Then pad right
+  //         await updateFullSeq('right');
+  //         // console.log('full seq len', fullSeq.current.length);
+  //       } catch (error) {
+  //         console.error('Error padding sequences:', error);
+  //       }
+  //     }
+  //   };
 
-    padSequences();
-  }, [isPlotInited.current]); // Depend on the reference's value indirectly
+  //   padSequences();
+  // }, [isPlotInited.current]); // Depend on the reference's value indirectly
 
   const getPlotLinePercentage = (commonScrollPercent) => {
     const percent = (commonScrollPercent * (boxSeqLen - viewSeqLen.current) + viewSeqLen.current / 2) / boxSeqLen;
@@ -781,6 +781,9 @@ function App() {
 
   // tracking these values
   const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, };
+
+  // fold genome form
+  const [isGenomeFormFolded, setIsGenomeFormFolded] = useState(false);
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene };
 
@@ -825,12 +828,17 @@ function App() {
 
   return (
     <>
-      <NavBar />
+      <NavBar isGenomeFormFolded={isGenomeFormFolded} setIsGenomeFormFolded={setIsGenomeFormFolded} />
       <div className="flex h-screen">
         {/* Left side of screen 1/4 or max-80 */}
-        <div className="w-1/4 max-w-[15rem] border-r border-gray-300 p-4">
+        {!isGenomeFormFolded && (
+          <div className="w-1/4 max-w-[15rem] border-r border-gray-300 p-4">
+            <GenomeForm {...genomeFormVars} />
+          </div>
+        )}
+        {/* <div className="w-1/4 max-w-[15rem] border-r border-gray-300 p-4">
           <GenomeForm {...genomeFormVars} />
-        </div>
+        </div> */}
 
         {/* Right side */}
         <div className="w-3/4 flex-grow p-2 relative overflow-visible">
