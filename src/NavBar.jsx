@@ -38,7 +38,7 @@ const NavBar = ({ isGenomeFormFolded, setIsGenomeFormFolded }) => {
             onClick={() => setIsGenomeFormFolded(!isGenomeFormFolded)}
           >
             <FaBars className="text-md" />  
-            <span>{isGenomeFormFolded ? "Show Genome Form" : "Hide Genome Form"}</span>
+            {/* <span>{isGenomeFormFolded ? "Show Genome Form" : "Hide Genome Form"}</span> */}
           </button>
           <LinkButton icon={FaHome} label="Home" to="/" />
           <LinkButton icon={FaEdit} label="Edit" to="/edit" />

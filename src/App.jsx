@@ -20,23 +20,32 @@ function App() {
 
   // constants
   // scrollable content sequence len: 1000 characters
-  const boxSeqHalfLen = 500;
+  const boxSeqHalfLen = 1000;
   const boxSeqLen = 2 * boxSeqHalfLen;
   const paddingLen = 4000;
   const fullSeqLenCap = 12000; // len limit for fullseq
   // starting seq len 4k, display middle 1k in box
-  const initHalfLen = 2000;
+  const initHalfLen = 2500;
   const coordTicks = [0.0, 0.5, 1.0];
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
-  const plotLeftMargin = 10;
-  const plotLegendLayout = {
-    y: 1.0, x: 1.0,
-    xanchor: 'right', yanchor: 'top',
-    scroll: true, // Enable scrolling for the legend
-    bgcolor: 'rgba(255, 255, 255, 0.6)',
-    bordercolor: 'rgba(0, 0, 0, 0.1)',
-    borderwidth: 1,
+  // testing 2k plot seq
+  // double the box width to be plot widht
+  const plotSeqHalfLen = 1000;
+  const plotRefScrollLeftMax = useRef(null);
+  const plotRefViewSeqHalfLen = plotSeqHalfLen / 2;
+
+  const plotLeftMargin = 0;
+
+  const plotLegendLayout = (xval) => {
+    return ({
+      y: 1.0, x: xval,
+      xanchor: 'right', yanchor: 'top',
+      scroll: true, // Enable scrolling for the legend
+      bgcolor: 'rgba(255, 255, 255, 0.6)',
+      bordercolor: 'rgba(0, 0, 0, 0.1)',
+      borderwidth: 1,
+    });
   };
 
   const fullStart = useRef(null); const fullEnd = useRef(null);
@@ -105,7 +114,7 @@ function App() {
   const puffinConfig = useRef(null);
 
   // toggle on and off helper line
-  const [showCentralLine, setShowCentralLine] = useState(true);
+  const [showCentralLine, setShowCentralLine] = useState(false);
 
   // toggle button for showing legend
   const [showLegend, setShowLegend] = useState(false);
@@ -208,6 +217,23 @@ function App() {
     }
   }, [seqInited]);
 
+
+  // calculate scroll left position to align the center coord
+  const getPlotScrollLeft = (cenCoord) => {
+    // plus strand only for now
+    const [scrollStartCoord, scrollEndCoord] = [boxStart.current + plotRefViewSeqHalfLen, boxEnd.current - plotRefViewSeqHalfLen];
+    // number of coords needed to scroll
+    const scrollCoord = strand === '+' ? cenCoord - scrollStartCoord : scrollEndCoord - cenCoord;
+    if (scrollCoord <= 0) {
+      return 0;
+    } else if (scrollCoord >= boxSeqHalfLen) {
+      // scroll to the very end
+      return plotRefScrollLeftMax.current;
+    } else {
+      return scrollCoord / boxSeqHalfLen * plotRefScrollLeftMax.current;
+    }
+  };
+
   // update sequence box size dimensions
   const updateSeqBoxWidths = () => {
     if (seqBoxRef.current && boxSeqFullWidth.current) {
@@ -220,7 +246,8 @@ function App() {
 
       const viewLen = boxSeqLen / full_w * box_w;
       // coords on tick/ ruler in view port
-      const viewCoords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, scrollPercent, i, strand));
+      const coords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, scrollPercent, i, strand));
+      const viewCoords = coords;
       setViewCoords(viewCoords);
 
       // update varaibles
@@ -231,8 +258,16 @@ function App() {
       scrollLeft.current = scroll_left;
       scrollLeftMax.current = leftEnd;
 
+      // update plot scroll left max
+      plotRefScrollLeftMax.current = box_w;
+
       // update plot widths for 1k view
-      if (is1kMode) { relayout({ width: box_w }); }
+      // for now manually set doulbe size
+      if (is1kMode) {
+        relayout({ width: box_w * 2 });
+        // sync scroll
+        plotRef.current.scrollLeft = getPlotScrollLeft(coords[1]);
+      }
 
       // update character width in 1k seq box
       setOneKCharWidth(box_w / boxSeqLen);
@@ -247,7 +282,7 @@ function App() {
     return () => {
       if (seqBoxRef.current) { observer.unobserve(seqBoxRef.current); }
     };
-  }, [seqBoxRef, is1kMode]);
+  }, [seqBoxRef]);
 
   // Remap the mouse scrolling up and down to left and right
   // within SequenceBox
@@ -429,13 +464,15 @@ function App() {
     }, 10);
   };
 
+
   // Sequence box scroll handler, handles infinite scroll for both seqbox and plot
   const handleSeqBoxScroll = () => {
     const seqElem = seqBoxRef.current;
     const scroll_left = seqElem.scrollLeft;
     const scrollPercent = scroll_left / scrollLeftMax.current;
 
-    setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i, strand)));
+    const coords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i, strand));
+    setViewCoords(coords);
     // udpate reference tracker
     scrollLeft.current = scroll_left;
     setCommonScrollPercent(scrollPercent);
@@ -453,6 +490,11 @@ function App() {
     // Sync plot scrolling
     if (!is1kMode && scrollingBox.current === 'seqBox' && !isReplacing) {
       plotRef.current.scrollLeft = scroll_left;
+    }
+
+    // test 1k sync
+    if (is1kMode && scrollingBox.current === 'seqBox' && !isReplacing) {
+      plotRef.current.scrollLeft = getPlotScrollLeft(coords[1]);
     }
   };
 
@@ -494,7 +536,7 @@ function App() {
         fullSeq.current = fullSeq.current.slice(-fullSeqLenCap);
         // adjust coords after chopping
         strand === '-' ? fullEnd.current = fullStart.current + fullSeqLenCap
-        : fullStart.current = fullEnd.current - fullSeqLenCap;
+          : fullStart.current = fullEnd.current - fullSeqLenCap;
       }
     }
   };
@@ -571,10 +613,9 @@ function App() {
 
       for (const key of puffinConfig.current.annoInputs) {
         const tensor = results[key]; // Access the tensor using the key
-        if (!tensor || tensor.data.length !== boxSeqLen) { // inference output has same length as seq box
+        if (!tensor || tensor.data.length !== end - start) { // inference output has same length as seq box
           throw new Error(`Invalid tensor data for ${key}`);
         }
-        // slice out part of the results, inferece of left and right buffers are redundant
         motifScores.push(Array.from(tensor.data)); // Convert tensor data to an array
       }
 
@@ -629,24 +670,30 @@ function App() {
     }));
   };
 
+
+
   // toggle on and off 1k button
   const handle1kToggle = () => {
     const newIs1kMode = !is1kMode;
     setIs1kMode(newIs1kMode);
-    const newPlotWidth = newIs1kMode ? boxWidth.current : boxSeqFullWidth.current;
+    // for now manually set width to be twice under 1k mode
+    const newPlotWidth = newIs1kMode ? boxWidth.current * 2 : boxSeqFullWidth.current;
     if (!newIs1kMode) { // switching to not 1k mode, aka scroll mode
       // no margin to sync scroll
       relayout({ margin: { l: 0, r: 0, t: plotTopMargin, b: plotBottomMargin }, showlegend: false, width: newPlotWidth });
       setTimeout(() => { plotRef.current.scrollLeft = scrollLeft.current; }, 10);
     } else {
-      relayout({ margin: { l: plotLeftMargin, r: plotLeftMargin, t: plotTopMargin, b: plotBottomMargin }, showlegend: showLegend, width: newPlotWidth, });
+      relayout({
+        margin: { l: plotLeftMargin, r: plotLeftMargin, t: plotTopMargin, b: plotBottomMargin }, width: newPlotWidth, showlegend: showLegend,});
+      setTimeout(() => { plotRef.current.scrollLeft = getPlotScrollLeft(viewCoords[1]); }, 10);
     }
   };
 
   const toggleLegend = () => {
     const newShowLegend = !showLegend;
     setShowLegend(newShowLegend);
-    relayout({ showlegend: newShowLegend });
+    const legend_x = strand === '+' ? (viewCoords[1] + plotRefViewSeqHalfLen - boxStart.current) / boxSeqLen : (boxEnd.current - viewCoords[1] + plotRefViewSeqHalfLen) / boxSeqLen;
+    relayout({  legend: plotLegendLayout(legend_x), showlegend: newShowLegend });
   };
 
   // reruns everytime initSeq changes, which happens when genome form is updated
@@ -659,7 +706,12 @@ function App() {
       const [startBufferStart, startBufferEnd] = [viewStart - boxSeqHalfLen, viewEnd - boxSeqHalfLen];
       const [endBufferStart, endBufferEnd] = [viewStart + boxSeqHalfLen, viewEnd + boxSeqHalfLen];
       // slicing coords
-      const [viewSliceStart, viewSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, viewStart - puffinConfig.current.puffinOffset, viewEnd + puffinConfig.current.puffinOffset, strand);
+      // testing 2k plot
+      const boxMid = viewStart + boxSeqHalfLen;
+      // pad to keep same length after convolution
+      const convOffset = puffinConfig.current.puffinOffset;
+      const [plotViewStart, plotViewEnd] = [boxMid - plotSeqHalfLen, boxMid + plotSeqHalfLen];
+      const [viewSliceStart, viewSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, plotViewStart - convOffset, plotViewEnd + convOffset, strand);
       const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, startBufferStart - puffinConfig.current.puffinOffset, startBufferEnd + puffinConfig.current.puffinOffset, strand);
       const [endSliceStart, endSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, endBufferStart - puffinConfig.current.puffinOffset, endBufferEnd + puffinConfig.current.puffinOffset, strand);
 
@@ -682,14 +734,14 @@ function App() {
       const colorHslArr = motifColors.map(hex => hexToHsl(hex));
 
       const outputs = await runInference(viewSeq);
-      const [tooltips, annoColors] = await runAnnoProcessing(outputs, viewStart, viewEnd, strand, colorHslArr, scaledThreshold, motifNames);
+      const [tooltips, annoColors] = await runAnnoProcessing(outputs, plotViewStart, plotViewEnd, strand, colorHslArr, scaledThreshold, motifNames);
 
       setTooltips(tooltips);
       setAnnoColors(annoColors);
 
       console.log('init plot, run infernce for view sequence and left righ buffer');
       if (outputs) {
-        const plotData = getPlotData(outputs, boxStart.current, boxEnd.current);
+        const plotData = getPlotData(outputs, plotViewStart, plotViewEnd);
         setPlotData(plotData);
         plotDataView.current = plotData;
         const xaxisLayout = { tickformat: 'd', autorange: strand === '-' ? 'reversed' : true, };
@@ -698,44 +750,51 @@ function App() {
         for (let i = 0; i < totalPlots; i++) {
           axisLayout[`xaxis${i + 1}`] = xaxisLayout;
         }
+        // last coord
+        const legend_x = strand === '+' ? (viewCoords[1] + plotRefViewSeqHalfLen - boxStart.current) / boxSeqLen : (boxEnd.current - viewCoords[1] + plotRefViewSeqHalfLen) / boxSeqLen;
         setPlotLayout({
           ...axisLayout,
           height: plotDivHeight,
           grid: puffinConfig.current.grid,
-          width: is1kMode ? boxWidth.current : boxSeqFullWidth.current,
+          // for now manually set plot width to be twice the box view width
+          // to test scrolling
+          width: is1kMode ? boxWidth.current * 2 : boxSeqFullWidth.current,
           template: 'plotly_white',
           margin: { l: plotLeftMargin, r: plotLeftMargin, t: plotTopMargin, b: plotBottomMargin },
-          legend: plotLegendLayout,
+          legend: plotLegendLayout(legend_x),
           showlegend: showLegend,
         });
       }
 
-      const startBufferOutputs = await runInference(startBufferSeq);
-      const endBufferOutputs = await runInference(endBufferSeq);
-      // set plot data for start and end buffers
-      plotDataStartBuffer.current = getPlotData(startBufferOutputs, startBufferStart, startBufferEnd);
-      plotDataEndBuffer.current = getPlotData(endBufferOutputs, endBufferStart, endBufferEnd);
+      // const startBufferOutputs = await runInference(startBufferSeq);
+      // const endBufferOutputs = await runInference(endBufferSeq);
+      // // set plot data for start and end buffers
+      // plotDataStartBuffer.current = getPlotData(startBufferOutputs, startBufferStart, startBufferEnd);
+      // plotDataEndBuffer.current = getPlotData(endBufferOutputs, endBufferStart, endBufferEnd);
 
       // get tooltips for buffers too
-      const [starBufferTooltips, startBufferAnnoColors] = await runAnnoProcessing(startBufferOutputs, startBufferStart, startBufferEnd, strand, colorHslArr, scaledThreshold, motifNames);
-      const [endBufferTooltips, endBufferAnnoColors] = await runAnnoProcessing(endBufferOutputs, endBufferStart, endBufferEnd, strand, colorHslArr, scaledThreshold, motifNames);
+      // const [starBufferTooltips, startBufferAnnoColors] = await runAnnoProcessing(startBufferOutputs, startBufferStart, startBufferEnd, strand, colorHslArr, scaledThreshold, motifNames);
+      // const [endBufferTooltips, endBufferAnnoColors] = await runAnnoProcessing(endBufferOutputs, endBufferStart, endBufferEnd, strand, colorHslArr, scaledThreshold, motifNames);
 
-      colorArrInHsl.current = colorHslArr;
-      motifNameArr.current = motifNames;
-      scaledAnnoScoresThreshold.current = scaledThreshold;
-      // anno and plot share the same coords
-      tooltipsStartBuffer.current = starBufferTooltips;
-      annoColorsStartBuffer.current = startBufferAnnoColors;
-      tooltipsView.current = tooltips;
-      annoColorsView.current = annoColors;
-      tooltipsEndBuffer.current = endBufferTooltips;
-      annoColorsEndBuffer.current = endBufferAnnoColors;
+      // colorArrInHsl.current = colorHslArr;
+      // motifNameArr.current = motifNames;
+      // scaledAnnoScoresThreshold.current = scaledThreshold;
+      // // anno and plot share the same coords
+      // tooltipsStartBuffer.current = starBufferTooltips;
+      // annoColorsStartBuffer.current = startBufferAnnoColors;
+      // tooltipsView.current = tooltips;
+      // annoColorsView.current = annoColors;
+      // tooltipsEndBuffer.current = endBufferTooltips;
+      // annoColorsEndBuffer.current = endBufferAnnoColors;
 
-      if (!is1kMode && plotRef.current && scrollLeftMax.current) {
+      // if (!is1kMode && plotRef.current && scrollLeftMax.current) {
+      if (plotRef.current) {
         // manually scroll to halfway
-        const middlePoint = 0.500 + 1 / boxSeqLen / 2;
+        // const scrollMiddlePoint = 0.500 + 1 / boxSeqLen / 2;
         setTimeout(() => {
-          plotRef.current.scrollLeft = middlePoint * scrollLeftMax.current;
+          const plotScrollLeftMax = plotRef.current.scrollWidth - plotRef.current.clientWidth;
+          plotRef.current.scrollLeft = 0.5 * (plotScrollLeftMax);
+          plotRefScrollLeftMax.current = plotScrollLeftMax;
           isPlotInited.current = true;
         }, 10);
       }
@@ -755,7 +814,6 @@ function App() {
   //         await updateFullSeq('left');
   //         // Then pad right
   //         await updateFullSeq('right');
-  //         // console.log('full seq len', fullSeq.current.length);
   //       } catch (error) {
   //         console.error('Error padding sequences:', error);
   //       }
@@ -1095,6 +1153,11 @@ function App() {
               onMouseDown={handleMouseDownResize}
             ></div>
           </div>
+
+          <div
+            className="absolute top-0 bottom-0 w-[2px] bg-gray-500"
+            style={{ left: "50%" }}
+          ></div>
 
           <DebugPanel {...debugVars} />
         </div>
