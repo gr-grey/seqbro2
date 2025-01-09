@@ -496,13 +496,12 @@ function App() {
 
   // Helper to handle sequence swapping
   const infiniteScroll1k = (direction) => {
+    // Do not proceed if background updates are in progress
+    if (isUpdatingBack || isReplacing) return;
 
     const seqBoxElem = seqBoxRef.current;
     const plotElem = plotRef.current;
     const full_w = boxSeqFullWidth.current;
-
-    // Do not proceed if background updates are in progress
-    if (isUpdatingBack || isReplacing) return;
 
     setIsReplacing(true);
     const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords(direction, 500);
@@ -519,21 +518,21 @@ function App() {
       setTooltips(tooltipsEndBuffer.current);
       setAnnoColors(annoColorsEndBuffer.current);
     }
+    // Scroll by half width to keep the same sequence in display
+    const plotScrollOffset = 0.5 * full_w;
+    const scrollOffset = 0.25 * full_w;
+    if (direction === "left") {
+      seqBoxElem.scrollLeft += scrollOffset;
+      plotElem.scrollLeft += plotScrollOffset;
+    } else {
+      seqBoxElem.scrollLeft -= scrollOffset;
+      plotElem.scrollLeft -= plotScrollOffset;
+    }
 
     // first update display, then update sequence (if needed)
     // then update plot buffer and annos - always
     // Update display and buffers asynchronously
     setTimeout(async () => {
-      // Scroll by half width to keep the same sequence in display
-      const scrollOffset = 0.25 * full_w;
-      const plotScrollOffset = 0.5 * full_w;
-      if (direction === "left") {
-        seqBoxElem.scrollLeft += scrollOffset;
-        plotElem.scrollLeft += plotScrollOffset;
-      } else {
-        seqBoxElem.scrollLeft -= scrollOffset;
-        plotElem.scrollLeft -= plotScrollOffset;
-      }
 
       setIsReplacing(false);
       boxStart.current = newBoxStart;
@@ -544,12 +543,16 @@ function App() {
       // If sequence update is needed, ensure it's safe to update
       if (updateSeq) {
         await updateFullSeq(direction);
-      } 
-      if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-'))  {
+      }
+      if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
         // update start
         // const [newStartBuffer, newEndBuffer] = [newBoxStart-500, newBoxEnd-500];
-        await setPlotBuffersNew(newBoxStart+ boxSeqHalfLen/2, newBoxEnd - boxSeqHalfLen/2);
+        await setPlotBuffersNew(newBoxStart + boxSeqHalfLen / 2, newBoxEnd - boxSeqHalfLen / 2);
         setIsUpdatingBack(false); // Ensure the flag is cleared
+      } else {
+        await setPlotBuffersNew(newBoxStart + boxSeqHalfLen / 2, newBoxEnd - boxSeqHalfLen / 2);
+        setIsUpdatingBack(false); // Ensure the flag is cleared
+
       }
     }, 0);
   };
@@ -559,7 +562,7 @@ function App() {
   const handleSeqBoxScroll = () => {
     // don't scroll if replacing
     if (isReplacing) return;
-    
+
     const seqElem = seqBoxRef.current;
     const scroll_left = seqElem.scrollLeft;
     const scrollPercent = scroll_left / scrollLeftMax.current;
@@ -587,8 +590,10 @@ function App() {
         // trigger infinite scroll if the plot gets to the edge
         if (plotScrollPercent < 0.05) {
           infiniteScroll1k('left');
+        } else if (plotScrollPercent > 0.95) {
+          infiniteScroll1k('right');
         } else {
-          plotRef.current.scrollLeft = getPlotScrollLeftPercent(coords[1]) * plotRefScrollLeftMax.current;
+          plotRef.current.scrollLeft = plotScrollPercent * plotRefScrollLeftMax.current;
         }
       } else {
         plotRef.current.scrollLeft = scroll_left;
@@ -909,7 +914,7 @@ function App() {
       // update left and rgith full seq, in that order
       await updateFullSeq('left');
       await updateFullSeq('right');
-      await setPlotBuffersNew(boxStart.current + boxSeqHalfLen/2, boxEnd.current - boxSeqHalfLen/2);
+      await setPlotBuffersNew(boxStart.current + boxSeqHalfLen / 2, boxEnd.current - boxSeqHalfLen / 2);
     };
     if (isPlotInited && seqInited) {
       console.log('start init buffer');
@@ -1099,7 +1104,7 @@ function App() {
 
             </div>
             {/* squeeze all 1k sequences */}
-            <div
+            {/* <div
               className="bg-white border border-gray-300 overflow-x-auto font-mono relative"
               style={{
                 whiteSpace: "nowrap",
@@ -1119,7 +1124,7 @@ function App() {
                 seqBoxRef.current.scrollLeft = newLeftPercent * boxSeqFullWidth.current;
               }}
             >
-              {/* Full Box */}
+              {/ Full Box /}
               <div
                 className="absolute top-1 bottom-1 border-[1px] border-blue-500"
                 style={{
@@ -1127,7 +1132,7 @@ function App() {
                   width: `${getBoxLinePercentage(commonScrollPercent)[2]}%`, // Width of the box
                 }}
               ></div>
-              {/* Middle Vertical Line */}
+              {/ Middle Vertical Line /}
               <div
                 className="absolute w-[1px] bg-gray-500 top-0 bottom-0"
                 style={{ left: `${getBoxLinePercentage(commonScrollPercent)[1]}%`, }}
@@ -1159,7 +1164,7 @@ function App() {
                   </span>
                 ))
                 : "Loading...."}
-            </div>
+            </div> */}
           </div>
 
           <DallianceViewer
