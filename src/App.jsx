@@ -34,6 +34,7 @@ function App() {
   const plotSeqHalfLen = 1000;
   const plotRefScrollLeftMax = useRef(null);
   const plotRefViewSeqHalfLen = plotSeqHalfLen / 2;
+  const plotToBoxScrollRatio = useRef(null);
 
   const plotLeftMargin = 0;
 
@@ -206,8 +207,10 @@ function App() {
       boxSeqFullWidth.current = full_w;
       boxWidth.current = view_w;
       scrollLeftMax.current = lmax;
-      // syncScrollPercent.current = middlePoint;
       setCommonScrollPercent(middlePoint);
+      // test plot to box scroll width ratio for syncing at 1k
+      const ratio = 2 * (boxSeqLen - viewLen) / boxSeqLen;
+      plotToBoxScrollRatio.current = ratio;
 
       // init view coords on tick/ ruler
       setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i, strand)));
@@ -266,7 +269,7 @@ function App() {
       if (is1kMode) {
         relayout({ width: box_w * 2 });
         // sync scroll
-        plotRef.current.scrollLeft = getPlotScrollLeftPercent(coords[1]) * plotRefScrollLeftMax.current;
+        // plotRef.current.scrollLeft = getPlotScrollLeftPercent(coords[1]) * plotRefScrollLeftMax.current;
       }
 
       // update character width in 1k seq box
@@ -497,7 +500,7 @@ function App() {
   // Helper to handle sequence swapping
   const infiniteScroll1k = (direction) => {
     // Do not proceed if background updates are in progress
-    if (isUpdatingBack || isReplacing) return;
+    if (isReplacing) return;
 
     const seqBoxElem = seqBoxRef.current;
     const plotElem = plotRef.current;
@@ -519,14 +522,14 @@ function App() {
       setAnnoColors(annoColorsEndBuffer.current);
     }
     // Scroll by half width to keep the same sequence in display
-    const plotScrollOffset = 0.5 * full_w;
+    // const plotScrollOffset = 2 * boxWidth.current / plotToBoxScrollRatio.current;
     const scrollOffset = 0.25 * full_w;
     if (direction === "left") {
       seqBoxElem.scrollLeft += scrollOffset;
-      plotElem.scrollLeft += plotScrollOffset;
+      // plotElem.scrollLeft += plotScrollOffset;
     } else {
       seqBoxElem.scrollLeft -= scrollOffset;
-      plotElem.scrollLeft -= plotScrollOffset;
+      // plotElem.scrollLeft -= plotScrollOffset;
     }
 
     // first update display, then update sequence (if needed)
@@ -586,7 +589,7 @@ function App() {
     if (!isReplacing && scrollingBox.current === 'seqBox') {
       if (is1kMode) {
         // test 1k sync
-        const plotScrollPercent = getPlotScrollLeftPercent(coords[1]);
+        const plotScrollPercent = (scrollPercent-0.5) * plotToBoxScrollRatio.current + 0.5;
         // trigger infinite scroll if the plot gets to the edge
         if (plotScrollPercent < 0.05) {
           infiniteScroll1k('left');
