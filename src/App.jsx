@@ -35,6 +35,15 @@ function App() {
   const plotRefScrollLeftMax = useRef(null);
   const plotRefViewSeqHalfLen = plotSeqHalfLen / 2;
   const plotToBoxScrollRatio = useRef(null);
+  const plotPaddingLen = 2000;
+
+  // full plot data and anno data
+  const fullPlotDataMat = useRef([]);
+  const fullAnnoColors = useRef([]);
+  const fullTooltips = useRef([]);
+  const fullPlotStart = useRef(null);
+  const fullPlotEnd = useRef(null);
+  const plotYKeys = useRef([]);
 
   const plotLeftMargin = 0;
 
@@ -150,6 +159,8 @@ function App() {
         puffinSession.current = await window.ort.InferenceSession.create(data.modelPath);
         annoSession.current = await window.ort.InferenceSession.create(data.annoModelPath);
         setIsPuffinSessionReady(true);
+        // load y data keys
+        plotYKeys.current = data.traces.map(item => item.result_key);
         console.log('Model and config loaded from puffin.config.json.');
 
       } catch (error) {
@@ -268,8 +279,6 @@ function App() {
       // for now manually set doulbe size
       if (is1kMode) {
         relayout({ width: box_w * 2 });
-        // sync scroll
-        // plotRef.current.scrollLeft = getPlotScrollLeftPercent(coords[1]) * plotRefScrollLeftMax.current;
       }
 
       // update character width in 1k seq box
@@ -328,11 +337,11 @@ function App() {
     if ((edge === 'left' && strand === '+') || (edge === 'right' && strand === '-')) {
       newBoxStart = boxStart.current - shiftVal;
       newBoxEnd = newBoxStart + boxSeqLen;
-      updateSeq = newBoxStart - 500 <= fullStart.current ? true : false;
+      updateSeq = newBoxStart - 2500 <= fullStart.current ? true : false;
     } else {
       newBoxStart = boxStart.current + shiftVal;
       newBoxEnd = newBoxStart + boxSeqLen;
-      updateSeq = newBoxEnd + 500 >= fullEnd.current ? true : false;
+      updateSeq = newBoxEnd + 2500 >= fullEnd.current ? true : false;
     }
 
     [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, newBoxStart, newBoxEnd, strand);
@@ -344,166 +353,52 @@ function App() {
   const handleMouseEnterSeqBox = () => { scrollingBox.current = 'seqBox'; };
   const handleMouseEnterPlot = () => { scrollingBox.current = 'plot'; };
 
-  // update plot data after swapping
-  const updatePlotBuffers = async (direction, newBoxStart, newBoxEnd) => {
-    let newStartBuffer, newViewData, newEndBuffer, newTooltipsStartBuffer, newTooltipsView, newTooltipsEndBuffer, newAnnoColorsStartBuffer, newAnnoColorsView, newAnnoColorsEndBuffer;
+  const updatePlotBuffersNew = (direction, strand) => {
+    let startBufferPlot, viewPlot, endBufferPlot, startBufferAnno, viewAnno, endBufferAnno, startBufferTooltips, viewTooltips, endBufferTooltips;
+    let updateFullPlots = false;
+    // shift everything toward a smaller start
     if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
-      // shift every thing to smaller by 500
-      const [start, end] = [newBoxStart - boxSeqHalfLen, newBoxEnd - boxSeqHalfLen];
-      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end, strand);
-      // run inference and get data
-      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffinConfig.current.puffinOffset, sliceEnd + puffinConfig.current.puffinOffset));
-      newStartBuffer = getPlotData(outputs, start, end);
-      newViewData = plotDataStartBuffer.current;
-      newEndBuffer = plotDataView.current;
-
-      // anno update
-      const [newTooltips, newAnnoColors] = await runAnnoProcessing(outputs, start, end, strand, colorArrInHsl.current, scaledAnnoScoresThreshold.current, motifNameArr.current);
-
-      newTooltipsStartBuffer = newTooltips;
-      newTooltipsView = tooltipsStartBuffer.current;
-      newTooltipsEndBuffer = tooltipsView.current;
-
-      newAnnoColorsStartBuffer = newAnnoColors;
-      newAnnoColorsView = annoColorsStartBuffer.current;
-      newAnnoColorsEndBuffer = annoColorsView.current;
-
-    } else {
-      // shift every thing bigger by 500
-      const [start, end] = [newBoxStart + boxSeqHalfLen, newBoxEnd + boxSeqHalfLen];
-      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, start, end, strand);
-      // run inference and get data
-      const outputs = await runInference(fullSeq.current.slice(sliceStart - puffinConfig.current.puffinOffset, sliceEnd + puffinConfig.current.puffinOffset));
-      newStartBuffer = plotDataView.current;
-      newViewData = plotDataEndBuffer.current;
-      newEndBuffer = getPlotData(outputs, start, end);
-
-      // anno update
-      const [newTooltips, newAnnoColors] = await runAnnoProcessing(outputs, start, end, strand, colorArrInHsl.current, scaledAnnoScoresThreshold.current, motifNameArr.current);
-
-      newTooltipsStartBuffer = tooltipsView.current;
-      newTooltipsView = tooltipsEndBuffer.current;
-      newTooltipsEndBuffer = newTooltips;
-
-      newAnnoColorsStartBuffer = annoColorsView.current;
-      newAnnoColorsView = annoColorsEndBuffer.current;
-      newAnnoColorsEndBuffer = newAnnoColors;
-
-    }
-    // udpate reference
-    plotDataStartBuffer.current = newStartBuffer;
-    plotDataView.current = newViewData;
-    plotDataEndBuffer.current = newEndBuffer;
-
-    tooltipsStartBuffer.current = newTooltipsStartBuffer;
-    tooltipsView.current = newTooltipsView;
-    tooltipsEndBuffer.current = newTooltipsEndBuffer;
-
-    annoColorsStartBuffer.current = newAnnoColorsStartBuffer;
-    annoColorsView.current = newAnnoColorsView;
-    annoColorsEndBuffer.current = newAnnoColorsEndBuffer;
-  };
-
-  const setPlotBuffersNew = async (startBufferMid, endBufferMid) => {
-    const convOffset = puffinConfig.current.puffinOffset;
-    try {
-      const [startBufferStart, startBufferEnd] = [startBufferMid - plotSeqHalfLen, startBufferMid + plotSeqHalfLen];
-      const [endBufferStart, endBufferEnd] = [endBufferMid - plotSeqHalfLen, endBufferMid + plotSeqHalfLen];
-
-      const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, startBufferStart - convOffset, startBufferEnd + convOffset, strand);
-      const [endSliceStart, endSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, endBufferStart - convOffset, endBufferEnd + convOffset, strand);
-
-      const startBufferOutputs = await runInference(fullSeq.current.slice(startSliceStart, startSliceEnd));
-      const endBufferOutputs = await runInference(fullSeq.current.slice(endSliceStart, endSliceEnd));
-      // set plot data for start and end buffers
-      plotDataStartBuffer.current = getPlotData(startBufferOutputs, startBufferStart, startBufferEnd);
-      plotDataEndBuffer.current = getPlotData(endBufferOutputs, endBufferStart, endBufferEnd);
-
-      const [starBufferTooltips, startBufferAnnoColors] = await runAnnoProcessing(startBufferOutputs, startBufferStart, startBufferEnd, strand, colorArrInHsl.current, scaledAnnoScoresThreshold.current, motifNameArr.current);
-      const [endBufferTooltips, endBufferAnnoColors] = await runAnnoProcessing(endBufferOutputs, endBufferStart, endBufferEnd, strand, colorArrInHsl.current, scaledAnnoScoresThreshold.current, motifNameArr.current);
-
-      tooltipsStartBuffer.current = starBufferTooltips;
-      annoColorsStartBuffer.current = startBufferAnnoColors;
-      tooltipsEndBuffer.current = endBufferTooltips;
-      annoColorsEndBuffer.current = endBufferAnnoColors;
-
-      console.log(`finished buffer for plot`);
-
-    } catch (error) {
-      console.error('Error setting plot buffer', error)
-    }
-  };
-
-  // Helper to handle sequence swapping
-  const triggerInfiniteScroll = (direction) => {
-
-    const seqBoxElem = seqBoxRef.current;
-    const plotElem = plotRef.current;
-    const full_w = boxSeqFullWidth.current;
-
-    // Do not proceed if background updates are in progress
-    if (isUpdatingBack || isReplacing) return;
-
-    setIsReplacing(true);
-    const { newBoxStart, newBoxEnd, sliceStart, sliceEnd, updateSeq } = getSwapSeqCoords(direction, boxSeqHalfLen);
-
-    // swap with new sequence in seqbox
-    setBoxSeq(fullSeq.current.slice(sliceStart, sliceEnd));
-    // swap with plot and annos
-    if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
-      setPlotData(plotDataStartBuffer.current);
-      setTooltips(tooltipsStartBuffer.current);
-      setAnnoColors(annoColorsStartBuffer.current);
-    } else {
-      setPlotData(plotDataEndBuffer.current);
-      setTooltips(tooltipsEndBuffer.current);
-      setAnnoColors(annoColorsEndBuffer.current);
-    }
-
-    // first update display, then update sequence (if needed)
-    // then update plot buffer and annos - always
-    // Update display and buffers asynchronously
-    setTimeout(async () => {
-      // Scroll by half width to keep the same sequence in display
-      const scrollOffset = 0.5 * full_w;
-      if (direction === "left") {
-        seqBoxElem.scrollLeft += scrollOffset;
-        plotElem.scrollLeft += scrollOffset;
-      } else {
-        seqBoxElem.scrollLeft -= scrollOffset;
-        plotElem.scrollLeft -= scrollOffset;
+      [viewPlot, endBufferPlot, viewAnno, endBufferAnno, viewTooltips, endBufferTooltips] = [plotDataStartBuffer.current, plotDataView.current, annoColorsStartBuffer.current, annoColorsView.current, tooltipsStartBuffer.current, tooltipsView.current];
+      // slice out new matrix and get plotdata
+      const [newStart, newEnd] = [boxStart.current - 500, boxEnd.current - 500];
+      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullPlotStart.current, fullPlotEnd.current, newStart, newEnd, strand);
+      const newMat = getPlotDataMat(fullPlotDataMat.current, fullPlotStart.current, fullPlotEnd.current, newStart, newEnd, strand);
+      startBufferPlot = getPlotDataNew(newMat, newStart, newEnd, strand, puffinConfig.current);
+      startBufferAnno = fullAnnoColors.current.slice(sliceStart, sliceEnd);
+      startBufferTooltips = fullTooltips.current.slice(sliceStart, sliceEnd);
+      if (newStart - 500 <= fullPlotStart.current) {
+        updateFullPlots = true;
       }
-
-      setIsReplacing(false);
-      boxStart.current = newBoxStart;
-      boxEnd.current = newBoxEnd;
-
-      // If sequence update is needed, ensure it's safe to update
-      if (updateSeq) {
-        setIsUpdatingBack(true);
-        try {
-          await updateFullSeq(direction);
-          await updatePlotBuffers(direction, newBoxStart, newBoxEnd);
-        } finally {
-          setIsUpdatingBack(false); // Ensure the flag is cleared
-        }
-      } else {
-        // Even if no sequence update is needed, ensure plot buffers are updated
-        setIsUpdatingBack(true);
-        try {
-          await updatePlotBuffers(direction, newBoxStart, newBoxEnd);
-        } finally { setIsUpdatingBack(false); }
+    } else {
+      // shift everything towards a bigger end
+      [startBufferPlot, viewPlot, startBufferAnno, viewAnno, startBufferTooltips, viewTooltips] = [plotDataView.current, plotDataEndBuffer.current, annoColorsView.current, annoColorsEndBuffer.current, tooltipsView.current, tooltipsEndBuffer.current];
+      // slice out new ends and get plot data
+      const [newStart, newEnd] = [boxStart.current + 500, boxEnd.current + 500];
+      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullPlotStart.current, fullPlotEnd.current, newStart, newEnd, strand);
+      const newMat = getPlotDataMat(fullPlotDataMat.current, fullPlotStart.current, fullPlotEnd.current, newStart, newEnd, strand);
+      endBufferPlot = getPlotDataNew(newMat, newStart, newEnd, strand, puffinConfig.current);
+      endBufferAnno = fullAnnoColors.current.slice(sliceStart, sliceEnd);
+      endBufferTooltips = fullTooltips.current.slice(sliceStart, sliceEnd);
+      if (newEnd + 500 >= fullPlotEnd.current) {
+        updateFullPlots = true;
       }
-    }, 10);
+    }
+
+    // update things
+    plotDataStartBuffer.current = startBufferPlot; annoColorsStartBuffer.current = startBufferAnno; tooltipsStartBuffer.current = startBufferTooltips;
+    plotDataView.current = viewPlot; annoColorsView.current = viewAnno; tooltipsView.current = viewTooltips;
+    plotDataEndBuffer.current = endBufferPlot; annoColorsEndBuffer.current = endBufferAnno; tooltipsEndBuffer.current = endBufferTooltips;
+
+    return updateFullPlots;
+
   };
 
   // Helper to handle sequence swapping
   const infiniteScroll1k = (direction) => {
     // Do not proceed if background updates are in progress
-    if (isReplacing) return;
+    if (isReplacing || isUpdatingBack) return;
 
     const seqBoxElem = seqBoxRef.current;
-    const plotElem = plotRef.current;
     const full_w = boxSeqFullWidth.current;
 
     setIsReplacing(true);
@@ -522,7 +417,6 @@ function App() {
       setAnnoColors(annoColorsEndBuffer.current);
     }
     // Scroll by half width to keep the same sequence in display
-    // const plotScrollOffset = 2 * boxWidth.current / plotToBoxScrollRatio.current;
     const scrollOffset = 0.25 * full_w;
     if (direction === "left") {
       seqBoxElem.scrollLeft += scrollOffset;
@@ -542,20 +436,20 @@ function App() {
       boxEnd.current = newBoxEnd;
 
       setIsUpdatingBack(true);
-
+      const updatePlots = updatePlotBuffersNew(direction, strand);
       // If sequence update is needed, ensure it's safe to update
-      if (updateSeq) {
+      if (updateSeq && updatePlots) {
         await updateFullSeq(direction);
-      }
-      if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
-        // update start
-        // const [newStartBuffer, newEndBuffer] = [newBoxStart-500, newBoxEnd-500];
-        await setPlotBuffersNew(newBoxStart + boxSeqHalfLen / 2, newBoxEnd - boxSeqHalfLen / 2);
-        setIsUpdatingBack(false); // Ensure the flag is cleared
-      } else {
-        await setPlotBuffersNew(newBoxStart + boxSeqHalfLen / 2, newBoxEnd - boxSeqHalfLen / 2);
-        setIsUpdatingBack(false); // Ensure the flag is cleared
-
+        console.log( `updating sequence and plots`);
+        await updatePlotMatAnnoTooltips(direction, strand, plotPaddingLen, puffinConfig, fullStart, fullEnd, fullPlotStart, fullPlotEnd, fullPlotDataMat);
+        setIsUpdatingBack(false);
+      } else if (updatePlots) {
+        console.log( `updating plots`);
+        setIsUpdatingBack(true);
+        await updatePlotMatAnnoTooltips(direction, strand, plotPaddingLen, puffinConfig, fullStart, fullEnd, fullPlotStart, fullPlotEnd, fullPlotDataMat);
+        setIsUpdatingBack(false);
+      } else  {
+        setIsUpdatingBack(false);
       }
     }, 0);
   };
@@ -576,20 +470,11 @@ function App() {
     scrollLeft.current = scroll_left;
     setCommonScrollPercent(scrollPercent);
 
-    // Disable infinite scrolling when background updates are in progress
-
-    // disable infinite scrolling when in 1k mode
-    // if (!is1kMode && scrollPercent < 0.05 && !isReplacing) {
-    //   triggerInfiniteScroll("left");
-    // } else if (!is1kMode && scrollPercent > 0.95 && !isReplacing) {
-    //   triggerInfiniteScroll("right");
-    // }
-
     // Sync plot scrolling
     if (!isReplacing && scrollingBox.current === 'seqBox') {
       if (is1kMode) {
         // test 1k sync
-        const plotScrollPercent = (scrollPercent-0.5) * plotToBoxScrollRatio.current + 0.5;
+        const plotScrollPercent = (scrollPercent - 0.5) * plotToBoxScrollRatio.current + 0.5;
         // trigger infinite scroll if the plot gets to the edge
         if (plotScrollPercent < 0.05) {
           infiniteScroll1k('left');
@@ -748,15 +633,76 @@ function App() {
     }
   };
 
-  // start coord < end coord, same for + and -
-  const getPlotData = (results, start, end) => {
+  // update full plot data matrix, full anno, and full Tooltips
+  const updatePlotMatAnnoTooltips = async (direction, strand, plotPaddingLen, puffinConfig, fullStart, fullEnd, fullPlotStart, fullPlotEnd, fullPlotDataMat) => {
+    let newMat, newAnnoColors, newTooltips;
+    const convoffset = puffinConfig.current.puffinOffset;
+    if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
+      // padding by extending start coord to a smaller new start, getting inference from [newStart, start]
+      const start = fullPlotStart.current;
+      const newStart = start - plotPaddingLen;
+      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, newStart - convoffset, start + convoffset, strand);
+      // console.log({
+      //   dir: 'start',
+      //   strand: strand,
+      //   convStart: newStart - convoffset,
+      //   convEnd:  start + convoffset,
+      //   outStart: newStart,
+      //   outEnd: start
+      // })
+      const convSeq = fullSeq.current.slice(sliceStart, sliceEnd);
+      const newOutput = await runInference(convSeq);
+      // get plot matrices, anno color list, and tooltips list
+      newMat = plotYKeys.current.map(key => Array.from(newOutput[key].data));
+      [newTooltips, newAnnoColors] = await runAnnoProcessing(newOutput, newStart, start, strand, colorArrInHsl.current, scaledAnnoScoresThreshold.current, motifNameArr.current);
+      fullPlotStart.current = newStart; // update reference
+    } else {
+      // padding by extending end coord to a bigger new end, getting inference from [end, newEnd]
+      const end = fullPlotEnd.current;
+      const newEnd = end + plotPaddingLen;
+      const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, end - convoffset, newEnd + convoffset, strand);
+      const convSeq = fullSeq.current.slice(sliceStart, sliceEnd);
+      const newOutput = await runInference(convSeq);
+      newMat = plotYKeys.current.map(key => Array.from(newOutput[key].data));
+      [newTooltips, newAnnoColors] = await runAnnoProcessing(newOutput, end, newEnd, strand, colorArrInHsl.current, scaledAnnoScoresThreshold.current, motifNameArr.current);
+      fullPlotEnd.current = newEnd; // update reference
+    }
 
+    if (direction === 'left') {
+      // Prepend newMat to fullPlotDataMat
+      fullPlotDataMat.current = newMat.map((row, idx) =>
+        row.concat(fullPlotDataMat.current[idx])
+      );
+      fullAnnoColors.current = newAnnoColors.concat(fullAnnoColors.current);
+      fullTooltips.current = newTooltips.concat(fullTooltips.current);
+    } else {
+      // Append newMat to fullPlotDataMat
+      fullPlotDataMat.current = newMat.map((row, idx) =>
+        fullPlotDataMat.current[idx].concat(row)
+      );
+      fullAnnoColors.current = fullAnnoColors.current.concat(newAnnoColors);
+      fullTooltips.current = fullTooltips.current.concat(newTooltips);
+    }
+  };
+
+  // get matrix of y values
+  const getPlotDataMat = (fullMat, fullStart, fullEnd, matStart, matEnd, strand) => {
+    const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart, fullEnd, matStart, matEnd, strand);
+    const mat = fullMat.map(row => row.slice(sliceStart, sliceEnd));
+    return mat;
+  };
+
+  const getPlotDataNew = (plotDataMatrix, start, end, strand, plotConfig) => {
+    // Generate x values based on strand direction
     const xs = strand === '+' ? range(start, end) : range(end, start, -1); // Reverse coordinates for '-' strand
-    // Dynamically create traces based on YAML configuration
-    const test_traces = puffinConfig.current.traces.map((traceConfig) => {
-      const yData = results[traceConfig.result_key]?.data; // Extract data using result_key
-      if (!yData) return null; // Skip if data is unavailable
 
+    // Loop through the trace configuration list with indexes
+    const test_traces = plotConfig.traces.map((traceConfig, index) => {
+      // Extract y values from the corresponding row in the matrix
+      const yData = plotDataMatrix[index];
+      if (!yData) return null; // Skip if yData is unavailable
+
+      // Create trace using the configuration and data
       return {
         x: xs,
         y: yData,
@@ -767,8 +713,10 @@ function App() {
         yaxis: traceConfig.yaxis,
       };
     });
-    return test_traces;
-  }
+
+    // Filter out any null traces (in case of missing data)
+    return test_traces.filter(trace => trace !== null);
+  };
 
   const relayout = (updates) => {
     setPlotLayout((prevLayout) => ({
@@ -807,24 +755,14 @@ function App() {
   useEffect(() => {
     const initPlot = async () => {
       setIsPlotInited(false);
-      // absolute coordinates, here view is the viewing chunk (vs buffer chunks), not just the viewport (viewLen)
-      // const [viewStart, viewEnd] = [boxStart.current, boxEnd.current];
-      // const [startBufferStart, startBufferEnd] = [viewStart - boxSeqHalfLen, viewEnd - boxSeqHalfLen];
-      // const [endBufferStart, endBufferEnd] = [viewStart + boxSeqHalfLen, viewEnd + boxSeqHalfLen];
-      // slicing coords
       // testing 2k plot
-      // const boxMid = viewStart + boxSeqHalfLen;
       // pad to keep same length after convolution
       const convOffset = puffinConfig.current.puffinOffset;
       const [plotViewStart, plotViewEnd] = [boxStart.current, boxEnd.current];
       const [viewSliceStart, viewSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, plotViewStart - convOffset, plotViewEnd + convOffset, strand);
-      // const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, startBufferStart - puffinConfig.current.puffinOffset, startBufferEnd + puffinConfig.current.puffinOffset, strand);
-      // const [endSliceStart, endSliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, endBufferStart - puffinConfig.current.puffinOffset, endBufferEnd + puffinConfig.current.puffinOffset, strand);
 
       // seqs for inferences
       const viewSeq = fullSeq.current.slice(viewSliceStart, viewSliceEnd);
-      // const startBufferSeq = fullSeq.current.slice(startSliceStart, startSliceEnd);
-      // const endBufferSeq = fullSeq.current.slice(endSliceStart, endSliceEnd);
 
       // separate motif names and colors from the dictionary
       const motifNameColorDict = puffinConfig.current.motifNameColorDict;
@@ -845,11 +783,14 @@ function App() {
       setTooltips(tooltips);
       setAnnoColors(annoColors);
 
-      console.log('init plot, run infernce for view sequence and left righ buffer');
+      console.log('init plot, run infernce for view sequence');
       if (outputs) {
-        const plotData = getPlotData(outputs, plotViewStart, plotViewEnd);
+        // use matrix instead of all inference results
+        const plotMat = plotYKeys.current.map(key => Array.from(outputs[key].data));
+        const plotData = getPlotDataNew(plotMat, plotViewStart, plotViewEnd, strand, puffinConfig.current);
         setPlotData(plotData);
         plotDataView.current = plotData;
+
         const xaxisLayout = { tickformat: 'd', autorange: strand === '-' ? 'reversed' : true, };
         const totalPlots = puffinConfig.current.grid.rows * puffinConfig.current.grid.columns;
         const axisLayout = {};
@@ -870,29 +811,22 @@ function App() {
           legend: plotLegendLayout(legend_x),
           showlegend: showLegend,
         });
+        // init full plot data refs
+        fullPlotDataMat.current = plotMat;
+        fullAnnoColors.current = annoColors;
+        fullTooltips.current = tooltips;
+        fullPlotStart.current = plotViewStart;
+        fullPlotEnd.current = plotViewEnd;
+        // init view and buffer vars
+        plotDataView.current = plotData;
+        annoColorsView.current = annoColors;
+        tooltipsView.current = tooltips;
       }
-
-      // const startBufferOutputs = await runInference(startBufferSeq);
-      // const endBufferOutputs = await runInference(endBufferSeq);
-      // // set plot data for start and end buffers
-      // plotDataStartBuffer.current = getPlotData(startBufferOutputs, startBufferStart, startBufferEnd);
-      // plotDataEndBuffer.current = getPlotData(endBufferOutputs, endBufferStart, endBufferEnd);
-
-      // get tooltips for buffers too
-      // const [starBufferTooltips, startBufferAnnoColors] = await runAnnoProcessing(startBufferOutputs, startBufferStart, startBufferEnd, strand, colorHslArr, scaledThreshold, motifNames);
-      // const [endBufferTooltips, endBufferAnnoColors] = await runAnnoProcessing(endBufferOutputs, endBufferStart, endBufferEnd, strand, colorHslArr, scaledThreshold, motifNames);
 
       // update reference
       colorArrInHsl.current = colorHslArr;
       motifNameArr.current = motifNames;
       scaledAnnoScoresThreshold.current = scaledThreshold;
-      // // anno and plot share the same coords
-      // tooltipsStartBuffer.current = starBufferTooltips;
-      // annoColorsStartBuffer.current = startBufferAnnoColors;
-      // tooltipsView.current = tooltips;
-      // annoColorsView.current = annoColors;
-      // tooltipsEndBuffer.current = endBufferTooltips;
-      // annoColorsEndBuffer.current = endBufferAnnoColors;
 
       // if (!is1kMode && plotRef.current && scrollLeftMax.current) {
       if (plotRef.current) {
@@ -917,7 +851,26 @@ function App() {
       // update left and rgith full seq, in that order
       await updateFullSeq('left');
       await updateFullSeq('right');
-      await setPlotBuffersNew(boxStart.current + boxSeqHalfLen / 2, boxEnd.current - boxSeqHalfLen / 2);
+      // await setPlotBuffersNew(boxStart.current + boxSeqHalfLen / 2, boxEnd.current - boxSeqHalfLen / 2);
+      // get left 2000 padding
+      await updatePlotMatAnnoTooltips('left', strand, plotPaddingLen, puffinConfig, fullStart, fullEnd, fullPlotStart, fullPlotEnd, fullPlotDataMat);
+      await updatePlotMatAnnoTooltips('right', strand, plotPaddingLen, puffinConfig, fullStart, fullEnd, fullPlotStart, fullPlotEnd, fullPlotDataMat);
+      // y matrix for start buffer
+      const [startBufferStart, startBufferEnd, endBufferStart, endBufferEnd] = [boxStart.current - 500, boxEnd.current - 500, boxStart.current + 500, boxEnd.current + 500];
+      const startBufferMat = getPlotDataMat(fullPlotDataMat.current, fullPlotStart.current, fullPlotEnd.current, startBufferStart, startBufferEnd, strand);
+      const endBufferMat = getPlotDataMat(fullPlotDataMat.current, fullPlotStart.current, fullPlotEnd.current, endBufferStart, endBufferEnd, strand);
+      plotDataStartBuffer.current = getPlotDataNew(startBufferMat, startBufferStart, startBufferEnd, strand, puffinConfig.current);
+      plotDataEndBuffer.current = getPlotDataNew(endBufferMat, endBufferStart, endBufferEnd, strand, puffinConfig.current);
+
+      // set annos and tooltips
+      const [startSliceStart, startSliceEnd] = getSliceIndicesFromCoords(fullPlotStart.current, fullPlotEnd.current, startBufferStart, startBufferEnd, strand);
+      const [endSliceStart, endSliceEnd] = getSliceIndicesFromCoords(fullPlotStart.current, fullPlotEnd.current, endBufferStart, endBufferEnd, strand);
+      annoColorsStartBuffer.current = fullAnnoColors.current.slice(startSliceStart, startSliceEnd);
+      tooltipsStartBuffer.current = fullTooltips.current.slice(startSliceStart, startSliceEnd);
+      annoColorsEndBuffer.current = fullAnnoColors.current.slice(endSliceStart, endSliceEnd);
+      tooltipsEndBuffer.current = fullTooltips.current.slice(endSliceStart, endSliceEnd);
+
+      console.log('full seq len', fullSeq.current.length);
     };
     if (isPlotInited && seqInited) {
       console.log('start init buffer');
@@ -925,24 +878,6 @@ function App() {
       // after the plot is inited, expand the sequence, set plot buffers
     }
   }, [isPlotInited]);
-
-  // // pad sequences after plot was inited
-  // useEffect(() => {
-  //   const padSequences = async () => {
-  //     if (isPlotInited.current) {
-  //       try {
-  //         // Pad left first
-  //         await updateFullSeq('left');
-  //         // Then pad right
-  //         await updateFullSeq('right');
-  //       } catch (error) {
-  //         console.error('Error padding sequences:', error);
-  //       }
-  //     }
-  //   };
-
-  //   padSequences();
-  // }, [isPlotInited.current]); // Depend on the reference's value indirectly
 
   const getPlotLinePercentage = (commonScrollPercent) => {
     const percent = (commonScrollPercent * (boxSeqLen - viewSeqLen.current) + viewSeqLen.current / 2) / boxSeqLen;
@@ -959,7 +894,7 @@ function App() {
   }
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, fullPlotDataMat, fullAnnoColors, fullTooltips, fullPlotStart, fullPlotEnd, isPlotInited };
 
   // fold genome form
   const [isGenomeFormFolded, setIsGenomeFormFolded] = useState(false);

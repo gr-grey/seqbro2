@@ -46,6 +46,25 @@ const fetchSequence = async (start, end, genome, chromosome, strand) => {
 // get indices for slicing the fullseq and get substring
 // with genomic coordinates, with strand consideration
 const getSliceIndicesFromCoords = (fullStart, fullEnd, subStart, subEnd, strand) => {
+    if (subStart < fullStart) {
+        console.error('sub start smaller than full start!');
+        console.log({
+            fullStart: fullStart,
+            fullEnd: fullEnd,
+            subStart: subStart,
+            subEnd: subEnd,
+            strand: strand,
+        })
+    } else if (subEnd > fullEnd) {
+        console.error('sub end bigger than full end!');
+        console.log({
+            fullStart: fullStart,
+            fullEnd: fullEnd,
+            subStart: subStart,
+            subEnd: subEnd,
+            strand: strand,
+        })
+    }
     if (strand === '+') {
         return [subStart - fullStart, subEnd - fullStart];
     } else {

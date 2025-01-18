@@ -1,6 +1,6 @@
 import React from "react";
 
-const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine,}) => {
+const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, fullPlotDataMat, fullAnnoColors, fullTooltips, fullPlotStart, fullPlotEnd, isPlotInited}) => {
 
     return (
         <>
@@ -9,6 +9,8 @@ const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent
                 <ul className="space-y-2 text-sm">
                     <li><span> scroll percent</span> {commonScrollPercent}</li>
                     <li><span> --------Plotly plot tracking---------</span></li>
+                    <li><span>Full output len</span> {isPlotInited && fullPlotDataMat.current ? [fullPlotDataMat.current.length, 'x', fullPlotDataMat.current[0].length] : 0}</li>
+                    <li><span>Full output start end</span> {fullPlotStart.current ? `${fullPlotStart.current} - ${fullPlotEnd.current}` : 0}</li>
                     <li><span>Central line</span> {`${showCentralLine}`}</li>
                     <li><span> plot div height </span> {plotDivHeight}</li>
 
