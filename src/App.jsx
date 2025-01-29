@@ -30,12 +30,15 @@ function App() {
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100]; // Tick positions in percentages
 
   // testing 2k plot seq
-  // double the box width to be plot widht
-  const plotSeqHalfLen = 1000;
+  // double the box width to be plot width
+  const plotSeqHalfLen = boxSeqHalfLen;
+  const plotSeqLen = plotSeqHalfLen * 2;
   const plotRefScrollLeftMax = useRef(null);
   const plotRefViewSeqHalfLen = plotSeqHalfLen / 2;
   const plotToBoxScrollRatio = useRef(null);
   const plotPaddingLen = 2000;
+
+  const plotSeqFullWidth = useRef(null); // similar to boxseq full length, scroll width of plot div
 
   // full plot data and anno data
   const fullPlotDataMat = useRef([]);
@@ -146,6 +149,7 @@ function App() {
 
   // squeeze 1k seq, set width so all 1k fits in
   const [oneKCharWidth, setOneKCharWidth] = useState(null);
+  const colorBoxRef = useRef(null);
 
   const [isPlotInited, setIsPlotInited] = useState(false);
 
@@ -214,39 +218,30 @@ function App() {
       // init viewing char number
       const viewLen = boxSeqLen / full_w * view_w;
       viewSeqLen.current = viewLen;
+      // init view coords on tick/ ruler
+      setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i, strand)));
+      
+      // make sure plot total content width is at least the same as loaded sequence length
+      // so that each base pair at least has 1 pixel
+      const plotScrollWidth = Math.max(view_w * 2, plotSeqLen);
+      const plotLmax = plotScrollWidth - view_w; // plot client width same as box client width
+      // plot to box scroll width ratio for syncing at 1k
+      // const ratio = 2 * (boxSeqLen - viewLen) / boxSeqLen;
+      const ratio = (lmax / full_w) / (plotLmax / plotScrollWidth);
+      plotToBoxScrollRatio.current = ratio;
+      
       // update global varialbes
       boxSeqFullWidth.current = full_w;
       boxWidth.current = view_w;
       scrollLeftMax.current = lmax;
       setCommonScrollPercent(middlePoint);
-      // test plot to box scroll width ratio for syncing at 1k
-      const ratio = 2 * (boxSeqLen - viewLen) / boxSeqLen;
-      plotToBoxScrollRatio.current = ratio;
-
-      // init view coords on tick/ ruler
-      setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i, strand)));
-
       // set oneK seq character width
-      setOneKCharWidth(view_w / boxSeqLen);
+      setOneKCharWidth(plotScrollWidth / plotSeqLen);
+      // set plot scroll width and client width
+      plotSeqFullWidth.current = plotScrollWidth;
+      plotRefScrollLeftMax.current = plotLmax;
     }
   }, [seqInited]);
-
-
-  // calculate scroll left position to align the center coord
-  const getPlotScrollLeftPercent = (cenCoord) => {
-    // plus strand only for now
-    const [scrollStartCoord, scrollEndCoord] = [boxStart.current + plotRefViewSeqHalfLen, boxEnd.current - plotRefViewSeqHalfLen];
-    // number of coords needed to scroll
-    const scrollCoord = strand === '+' ? cenCoord - scrollStartCoord : scrollEndCoord - cenCoord;
-    if (scrollCoord <= 0) {
-      return 0;
-    } else if (scrollCoord >= plotSeqHalfLen) {
-      // scroll to the very end
-      return 1;
-    } else {
-      return scrollCoord / plotSeqHalfLen;
-    }
-  };
 
   // update sequence box size dimensions
   const updateSeqBoxWidths = () => {
@@ -267,22 +262,33 @@ function App() {
       // update varaibles
       boxWidth.current = box_w;
       viewSeqLen.current = viewLen;
-      // syncScrollPercent.current = scrollPercent;
       setCommonScrollPercent(scrollPercent);
       scrollLeft.current = scroll_left;
       scrollLeftMax.current = leftEnd;
 
-      // update plot scroll left max
-      plotRefScrollLeftMax.current = box_w;
+      
+      // update plot width status
+      const plotFullWidth = Math.max(box_w * 2, plotSeqLen);
+      const plotLmax = plotFullWidth - box_w;
+      // update 1k box to plot ratio
+      // plot to box scroll width ratio for syncing at 1k
+      const ratio = leftEnd/full_w / (plotLmax / plotFullWidth);
+      plotSeqFullWidth.current = plotFullWidth;
+      plotRefScrollLeftMax.current = plotLmax;
+      plotToBoxScrollRatio.current = ratio;
+      setOneKCharWidth(plotFullWidth / plotSeqLen);
 
-      // update plot widths for 1k view
-      // for now manually set doulbe size
       if (is1kMode) {
-        relayout({ width: box_w * 2 });
+        relayout({ width: plotFullWidth });
+        // // sync scrolling point
+        // Wait for the DOM to update
+        requestAnimationFrame(() => {
+          const scrollPosition = ((scrollPercent - 0.5) * ratio + 0.5) * plotLmax;
+          plotRef.current.scrollLeft = scrollPosition;
+          colorBoxRef.current.scrollLeft = scrollPosition;
+        });
       }
 
-      // update character width in 1k seq box
-      setOneKCharWidth(box_w / boxSeqLen);
     }
   };
 
@@ -421,12 +427,12 @@ function App() {
 
     //Step 2: Scroll the sequence box by half the total width to keep the user centered
     requestAnimationFrame(() => {
-    const scrollOffset = 0.25 * full_w;
-    if (direction === 'left') {
-      seqBoxElem.scrollLeft += scrollOffset;
-    } else {
-      seqBoxElem.scrollLeft -= scrollOffset;
-    }
+      const scrollOffset = 0.25 * full_w;
+      if (direction === 'left') {
+        seqBoxElem.scrollLeft += scrollOffset;
+      } else {
+        seqBoxElem.scrollLeft -= scrollOffset;
+      }
     });
 
     setIsReplacing(false); // allow scroll syncs when swapping is done
@@ -480,7 +486,10 @@ function App() {
           await infiniteScroll1k('right');
         } else {
           // sync plot scrolling point
-          plotRef.current.scrollLeft = plotScrollPercent * plotRefScrollLeftMax.current;
+          const scrollPosition = plotScrollPercent * plotRefScrollLeftMax.current;
+          plotRef.current.scrollLeft = scrollPosition;
+          colorBoxRef.current.scrollLeft = scrollPosition;
+
         }
       } else {
         plotRef.current.scrollLeft = scroll_left;
@@ -640,14 +649,6 @@ function App() {
       const start = fullPlotStart.current;
       const newStart = start - plotPaddingLen;
       const [sliceStart, sliceEnd] = getSliceIndicesFromCoords(fullStart.current, fullEnd.current, newStart - convoffset, start + convoffset, strand);
-      // console.log({
-      //   dir: 'start',
-      //   strand: strand,
-      //   convStart: newStart - convoffset,
-      //   convEnd:  start + convoffset,
-      //   outStart: newStart,
-      //   outEnd: start
-      // })
       const convSeq = fullSeq.current.slice(sliceStart, sliceEnd);
       const newOutput = await runInference(convSeq);
       // get plot matrices, anno color list, and tooltips list
@@ -742,16 +743,19 @@ function App() {
     const newIs1kMode = !is1kMode;
     setIs1kMode(newIs1kMode);
     // for now manually set width to be twice under 1k mode
-    const newPlotWidth = newIs1kMode ? boxWidth.current * 2 : boxSeqFullWidth.current;
+    const newPlotWidth = newIs1kMode ? plotSeqFullWidth.current : boxSeqFullWidth.current;
     if (!newIs1kMode) { // switching to not 1k mode, aka scroll mode
       // no margin to sync scroll
       relayout({ margin: { l: 0, r: 0, t: plotTopMargin, b: plotBottomMargin }, showlegend: false, width: newPlotWidth });
-      setTimeout(() => { plotRef.current.scrollLeft = scrollLeft.current; }, 10);
+      requestAnimationFrame(() => { plotRef.current.scrollLeft = scrollLeft.current; });
     } else {
       relayout({
         margin: { l: plotLeftMargin, r: plotLeftMargin, t: plotTopMargin, b: plotBottomMargin }, width: newPlotWidth, showlegend: showLegend,
       });
-      setTimeout(() => { plotRef.current.scrollLeft = getPlotScrollLeftPercent(viewCoords[1]) * plotRefScrollLeftMax.current; }, 10);
+      requestAnimationFrame(() => {
+        const plotScrollPercent = (commonScrollPercent - 0.5) * plotToBoxScrollRatio.current + 0.5;
+        plotRef.current.scrollLeft = plotScrollPercent * plotRefScrollLeftMax.current;
+      });
     }
   };
 
@@ -817,7 +821,7 @@ function App() {
           grid: puffinConfig.current.grid,
           // for now manually set plot width to be twice the box view width
           // to test scrolling
-          width: is1kMode ? boxWidth.current * 2 : boxSeqFullWidth.current,
+          width: is1kMode ? plotSeqFullWidth.current : boxSeqFullWidth.current,
           template: 'plotly_white',
           margin: { l: plotLeftMargin, r: plotLeftMargin, t: plotTopMargin, b: plotBottomMargin },
           legend: plotLegendLayout(legend_x),
@@ -840,14 +844,12 @@ function App() {
       motifNameArr.current = motifNames;
       scaledAnnoScoresThreshold.current = scaledThreshold;
 
-      // if (!is1kMode && plotRef.current && scrollLeftMax.current) {
       if (plotRef.current) {
         // manually scroll to halfway
-        // const scrollMiddlePoint = 0.500 + 1 / boxSeqLen / 2;
         setTimeout(() => {
-          const plotScrollLeftMax = plotRef.current.scrollWidth - plotRef.current.clientWidth;
-          plotRef.current.scrollLeft = 0.5 * (plotScrollLeftMax);
-          plotRefScrollLeftMax.current = plotScrollLeftMax;
+          const scrollPosition = 0.5 * (plotRefScrollLeftMax.current);
+          plotRef.current.scrollLeft = scrollPosition;
+          colorBoxRef.current.scrollLeft = scrollPosition;
           setIsPlotInited(true);
         }, 10);
       }
@@ -863,7 +865,6 @@ function App() {
       // update left and rgith full seq, in that order
       await updateFullSeq('left');
       await updateFullSeq('right');
-      // await setPlotBuffersNew(boxStart.current + boxSeqHalfLen / 2, boxEnd.current - boxSeqHalfLen / 2);
       // get left 2000 padding
       await updatePlotMatAnnoTooltips('left', strand, plotPaddingLen, puffinConfig, fullStart, fullEnd, fullPlotStart, fullPlotEnd, fullPlotDataMat);
       await updatePlotMatAnnoTooltips('right', strand, plotPaddingLen, puffinConfig, fullStart, fullEnd, fullPlotStart, fullPlotEnd, fullPlotDataMat);
@@ -883,9 +884,9 @@ function App() {
       tooltipsEndBuffer.current = fullTooltips.current.slice(endSliceStart, endSliceEnd);
     };
     if (isPlotInited && seqInited) {
-      console.log('start init buffer');
-      initPlotBuffers();
+      console.log('initiating buffers');
       // after the plot is inited, expand the sequence, set plot buffers
+      initPlotBuffers();
     }
   }, [isPlotInited]);
 
@@ -904,7 +905,7 @@ function App() {
   }
 
   // tracking these values
-  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, fullPlotDataMat, fullAnnoColors, fullTooltips, fullPlotStart, fullPlotEnd, isPlotInited };
+  const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, fullPlotDataMat, fullAnnoColors, fullTooltips, fullPlotStart, fullPlotEnd, isPlotInited, colorBoxRef, oneKCharWidth };
 
   // fold genome form
   const [isGenomeFormFolded, setIsGenomeFormFolded] = useState(false);
@@ -1052,67 +1053,67 @@ function App() {
 
             </div>
             {/* squeeze all 1k sequences */}
-            {/* <div
-              className="bg-white border border-gray-300 overflow-x-auto font-mono relative"
-              style={{
-                whiteSpace: "nowrap",
-                // overflow: "hidden", // Disable user scrolling
-              }}
-              onClick={(e) => {
-                // Get the click position relative to the div
-                const rect = e.currentTarget.getBoundingClientRect();
-                const clickX = e.clientX - rect.left; // Click X position within the div
-                const divWidth = rect.width; // Width of the div
-                // console.log('div',divWidth);
+            <div className='relative'>
+              <div
+                className="absolute w-[2px] bg-gray-400 top-0 bottom-0"
+                style={{ left: `50%`, }}
+              ></div>
+              <div
+                className="anno-color-box bg-white border border-gray-300 overflow-x-auto font-mono"
+                style={{ whiteSpace: "nowrap", }}
+                ref={colorBoxRef}
+              // onClick={(e) => {
+              //   // Get the click position relative to the div
+              //   const rect = e.currentTarget.getBoundingClientRect();
+              //   const clickX = e.clientX - rect.left; // Click X position within the div
+              //   const divWidth = rect.width; // Width of the div
+              //   // console.log('div',divWidth);
+              //   // Calculate new commonScrollPercent
+              //   const newScrollPercent = clickX / divWidth;
+              //   const newLeftPercent = newScrollPercent - viewSeqLen.current / boxSeqLen / 2;
+              //   // Update the state
+              //   seqBoxRef.current.scrollLeft = newLeftPercent * boxSeqFullWidth.current;
+              // }}
+              >
+                {/* Full Box */}
+                {/* <div
+                  className="absolute top-1 bottom-1 border-[1px] border-blue-500"
+                  style={{
+                    left: `${getBoxLinePercentage(commonScrollPercent)[0]}%`, // Left edge
+                    width: `${getBoxLinePercentage(commonScrollPercent)[2]}%`, // Width of the box
+                  }}
+                ></div> */}
+                {/* Middle Vertical Line */}
 
-                // Calculate new commonScrollPercent
-                const newScrollPercent = clickX / divWidth;
-                const newLeftPercent = newScrollPercent - viewSeqLen.current / boxSeqLen / 2;
-                // Update the state
-                seqBoxRef.current.scrollLeft = newLeftPercent * boxSeqFullWidth.current;
-              }}
-            >
-              {/ Full Box /}
-              <div
-                className="absolute top-1 bottom-1 border-[1px] border-blue-500"
-                style={{
-                  left: `${getBoxLinePercentage(commonScrollPercent)[0]}%`, // Left edge
-                  width: `${getBoxLinePercentage(commonScrollPercent)[2]}%`, // Width of the box
-                }}
-              ></div>
-              {/ Middle Vertical Line /}
-              <div
-                className="absolute w-[1px] bg-gray-500 top-0 bottom-0"
-                style={{ left: `${getBoxLinePercentage(commonScrollPercent)[1]}%`, }}
-              ></div>
-              {boxSeq && oneKCharWidth
-                ? boxSeq.split("").map((char, index) => (
-                  // <Tippy content={`${tooltips[index]}`} key={index}>
-                  //   <span style={{
-                  //     backgroundColor: annoColors[index],
-                  //     display: "inline-block",
-                  //     width: `${oneKCharWidth}px`,
-                  //     height: "10px",
-                  //   }} >
-                  //     {" "}
-                  //   </span>
-                  // </Tippy>
-                  // vanilla tooltips
-                  <span
-                    key={index}
-                    className="inline-block"
-                    title={char + ' ' + tooltips[index]} // Native tooltip with coordinate
-                    style={{
-                      backgroundColor: annoColors[index],
-                      width: `${oneKCharWidth}px`,
-                      height: "10px",
-                    }}
-                  >
-                    {" "}
-                  </span>
-                ))
-                : "Loading...."}
-            </div> */}
+                {boxSeq && oneKCharWidth
+                  ? boxSeq.split("").map((char, index) => (
+                    <Tippy content={`${char + ' ' + tooltips[index]}`} key={index}>
+                      <span style={{
+                        backgroundColor: annoColors[index],
+                        display: "inline-block",
+                        width: `${oneKCharWidth}px`,
+                        height: "10px",
+                      }} >
+                        {" "}
+                      </span>
+                    </Tippy>
+                    // vanilla tooltips
+                    // <span
+                    //   key={index}
+                    //   className="inline-block"
+                    //   title={char + ' ' + tooltips[index]} // Native tooltip with coordinate
+                    //   style={{
+                    //     backgroundColor: annoColors[index],
+                    //     width: `${oneKCharWidth}px`,
+                    //     height: "10px",
+                    //   }}
+                    // >
+                    //   {" "}
+                    // </span>
+                  ))
+                  : "Loading...."}
+              </div>
+            </div>
           </div>
 
           <DallianceViewer

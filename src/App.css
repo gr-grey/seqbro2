@@ -11,3 +11,7 @@
 .plot-box::-webkit-scrollbar {
   display: none;
 } */
+
+.anno-color-box::-webkit-scrollbar {
+  display: none;
+}

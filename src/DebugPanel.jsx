@@ -1,13 +1,18 @@
 import React from "react";
 
-const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, fullPlotDataMat, fullAnnoColors, fullTooltips, fullPlotStart, fullPlotEnd, isPlotInited}) => {
+const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, fullPlotDataMat, fullAnnoColors, fullTooltips, fullPlotStart, fullPlotEnd, isPlotInited, colorBoxRef, oneKCharWidth }) => {
 
     return (
         <>
             <div className="border-t border-gray-200 mt-2">
                 <h1>Debug:</h1>
                 <ul className="space-y-2 text-sm">
+                    <li><span> scrollLeft </span> {`${scrollLeft.current}`}</li>
+                    <li><span> scrollLeftMax </span> {`${scrollLeftMax.current}`}</li>
                     <li><span> scroll percent</span> {commonScrollPercent}</li>
+                    <li><span> anno color box width</span> {plotLayout && colorBoxRef.current ? colorBoxRef.current.scrollWidth : 0}</li>
+                    <li><span> each char, 2k char: </span> {oneKCharWidth}, {oneKCharWidth * 2000}</li>
+                    <li><span> box view width:</span> {boxWidth.current}</li>
                     <li><span> --------Plotly plot tracking---------</span></li>
                     <li><span>Full output len</span> {isPlotInited && fullPlotDataMat.current ? [fullPlotDataMat.current.length, 'x', fullPlotDataMat.current[0].length] : 0}</li>
                     <li><span>Full output start end</span> {fullPlotStart.current ? `${fullPlotStart.current} - ${fullPlotEnd.current}` : 0}</li>
@@ -18,10 +23,7 @@ const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent
                     <li><span> view coords: </span> {`${viewCoords}`}</li>
                     <li><span> 1k mode: </span> {`${is1kMode}`}</li>
                     <li><span> scrollingBox </span> {`${scrollingBox.current}`}</li>
-                    <li><span> scrollLeft </span> {`${scrollLeft.current}`}</li>
-                    <li><span> scrollLeftMax </span> {`${scrollLeftMax.current}`}</li>
                     <li><span> box seq width:</span> {boxSeqFullWidth.current}</li>
-                    <li><span> box view width:</span> {boxWidth.current}</li>
                     <li><span> viewSeqLen:</span> {viewSeqLen.current}</li>
                     <li>
                         <span> Full seq Start - End (zero based, exclude last) coordinate:</span>
