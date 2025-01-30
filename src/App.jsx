@@ -15,7 +15,7 @@ function App() {
   const [genome, setGenome] = useState("hg38");
   const [chromosome, setChromosome] = useState("chr7");
   const [coordinate, setCoordinate] = useState(5530600);
-  const [strand, setStrand] = useState('+');
+  const [strand, setStrand] = useState('-');
   const [gene, setGene] = useState('ACTB');
 
   // constants
@@ -38,6 +38,7 @@ function App() {
   const plotToBoxScrollRatio = useRef(null);
   const plotPaddingLen = 2000;
   const plotViewSeqHalfLen = useRef(null);
+  const seqBoxBorderHalf = useRef(null);
 
   const plotSeqFullWidth = useRef(null); // similar to boxseq full length, scroll width of plot div
 
@@ -231,7 +232,10 @@ function App() {
       // const ratio = 2 * (boxSeqLen - viewLen) / boxSeqLen;
       const ratio = (lmax / full_w) / (plotLmax / plotScrollWidth);
       plotToBoxScrollRatio.current = ratio;
-      plotViewSeqHalfLen.current = view_w / plotScrollWidth * plotSeqLen / 2;
+      const seqViewHalfLen = view_w / plotScrollWidth * plotSeqLen / 2;
+      plotViewSeqHalfLen.current = seqViewHalfLen;
+
+      seqBoxBorderHalf.current = viewLen / 2 / seqViewHalfLen / 2 * 100;
 
       // update global varialbes
       boxSeqFullWidth.current = full_w;
@@ -280,8 +284,11 @@ function App() {
       plotSeqFullWidth.current = plotFullWidth;
       plotRefScrollLeftMax.current = plotLmax;
       plotToBoxScrollRatio.current = ratio;
-      plotViewSeqHalfLen.current = box_w / plotFullWidth * plotSeqLen / 2;
-      console.log('plotViewSeqHalfLen', box_w / plotFullWidth * plotSeqLen / 2);
+      // plotViewSeqHalfLen.current = box_w / plotFullWidth * plotSeqLen / 2;
+      const seqViewHalfLen = box_w / plotFullWidth * plotSeqLen / 2;
+      plotViewSeqHalfLen.current = seqViewHalfLen;
+      seqBoxBorderHalf.current = viewLen / 2 / seqViewHalfLen / 2 * 100;
+
       setOneKCharWidth(eachCharWidth);
 
       if (is1kMode) {
@@ -977,9 +984,6 @@ function App() {
             <GenomeForm {...genomeFormVars} />
           </div>
         )}
-        {/* <div className="w-1/4 max-w-[15rem] border-r border-gray-300 p-4">
-          <GenomeForm {...genomeFormVars} />
-        </div> */}
 
         {/* Right side */}
         <div className="w-3/4 flex-grow p-2 relative overflow-visible">
@@ -1034,7 +1038,7 @@ function App() {
 
             <div className='relative'>
               <div
-                className="sequence-box bg-white border border-blue-500 overflow-x-auto font-mono"
+                className="sequence-box bg-white border-[2px] border-dashed border-green-500 overflow-x-auto font-mono"
                 ref={seqBoxRef}
                 onScroll={handleSeqBoxScroll}
                 style={{ whiteSpace: "nowrap" }}
@@ -1091,7 +1095,7 @@ function App() {
                 />
                 <div className="peer h-6 w-11 rounded-full border bg-slate-200 after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-sky-800 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-green-300"></div>
               </label>
-              <span className="text-gray-700 font-medium">Helper Line</span>
+              <span className="text-gray-700 font-medium">Sequence box area</span>
               <label className="relative inline-flex cursor-pointer items-center">
                 <input
                   type="checkbox"
@@ -1104,7 +1108,7 @@ function App() {
             </div>
 
             {/* Legend Toggle */}
-            {is1kMode && (<div className="flex items-center space-x-2">
+            {/* {is1kMode && (<div className="flex items-center space-x-2">
               <span className="text-gray-700 font-medium">Show Legend</span>
               <label className="relative inline-flex cursor-pointer items-center">
                 <input
@@ -1115,12 +1119,12 @@ function App() {
                 />
                 <div className="peer h-6 w-11 rounded-full border bg-slate-200 after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-sky-800 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:ring-green-300"></div>
               </label>
-            </div>)}
+            </div>)} */}
 
           </div>
 
           {/* squeeze all 1k sequences */}
-          <div className='relative pb-1 mb-1'>
+          { is1kMode && <div className='relative pb-1 mb-1'>
             {/* middle line */}
             <div
               className="absolute w-[2px] bg-gray-400 top-0 bottom-0"
@@ -1160,13 +1164,14 @@ function App() {
               ref={colorBoxRef}
             >
               {/* Full Box */}
-              {/* <div
-                  className="absolute top-1 bottom-1 border-[1px] border-blue-500"
-                  style={{
-                    left: `${getBoxLinePercentage(commonScrollPercent)[0]}%`, // Left edge
-                    width: `${getBoxLinePercentage(commonScrollPercent)[2]}%`, // Width of the box
-                  }}
-                ></div> */}
+              {showCentralLine && <div
+                className="absolute top-6 bottom-1 border-2 border-dashed border-green-500"
+                style={{
+                  left: `${50 - seqBoxBorderHalf.current}%`, // Left edge
+                  width: `${seqBoxBorderHalf.current * 2}%`, // Width of the box
+                  pointerEvents: "none",
+                }}
+              ></div>}
               {/* Middle Vertical Line */}
 
               {boxSeq && oneKCharWidth
@@ -1197,7 +1202,7 @@ function App() {
                 ))
                 : "Loading...."}
             </div>
-          </div>
+          </div>}
 
           <div className="relative">
             {/* title area */}
@@ -1220,9 +1225,18 @@ function App() {
                       layout={plotLayout}
                       config={{ responsive: false }}
                     />
+                    {/* Full Box */}
+                    {showCentralLine  && is1kMode && <div
+                      className="absolute top-1 bottom-1 border-2 border-dashed border-green-500"
+                      style={{
+                        left: `${50 - seqBoxBorderHalf.current}%`, // Left edge
+                        width: `${seqBoxBorderHalf.current * 2}%`, // Width of the box
+                        pointerEvents: "none",
+                      }}
+                    ></div>}
                     <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
                       {/* Central vertical line */}
-                      {showCentralLine && <div
+                      {<div
                         className="absolute h-full w-[2px] bg-gray-500 opacity-60"
                         style={{
                           left: '50%',
