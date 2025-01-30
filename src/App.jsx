@@ -15,7 +15,7 @@ function App() {
   const [genome, setGenome] = useState("hg38");
   const [chromosome, setChromosome] = useState("chr7");
   const [coordinate, setCoordinate] = useState(5530600);
-  const [strand, setStrand] = useState('-');
+  const [strand, setStrand] = useState('+');
   const [gene, setGene] = useState('ACTB');
 
   // constants
@@ -104,7 +104,7 @@ function App() {
   const annoSession = useRef(null);
 
   // plotly plot part
-  const [plotDivHeight, setPlotDivHeight] = useState(700);
+  const [plotDivHeight, setPlotDivHeight] = useState(500);
   const plotTopMargin = 0;
   const plotBottomMargin = 15;
 
@@ -224,8 +224,8 @@ function App() {
       setViewCoords(coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewLen, middlePoint, i, strand)));
 
       // make sure plot total content width is at least the same as loaded sequence length
-      // so that each base pair at least has 1 pixel
-      const eachCharWidth = Math.ceil(view_w * 2 / plotSeqLen);
+      // each base pair at least has 1 pixel, and only increments by 0.5
+      const eachCharWidth = Math.max(Math.ceil(view_w * 2 / plotSeqLen * 2) / 2, 1);
       const plotScrollWidth = eachCharWidth * plotSeqLen;
       const plotLmax = plotScrollWidth - view_w; // plot client width same as box client width
       // plot to box scroll width ratio for syncing at 1k
@@ -440,11 +440,21 @@ function App() {
 
     //Step 2: Scroll the sequence box by half the total width to keep the user centered
     requestAnimationFrame(() => {
-      const scrollOffset = 0.25 * full_w;
-      if (direction === 'left') {
-        seqBoxElem.scrollLeft += scrollOffset;
+     
+      if (scrollingBox.current === 'seqBox') {
+        const scrollOffset = 0.25 * full_w;
+        if (direction === 'left') {
+          seqBoxElem.scrollLeft += scrollOffset;
+        } else {
+          seqBoxElem.scrollLeft -= scrollOffset;
+        }
       } else {
-        seqBoxElem.scrollLeft -= scrollOffset;
+        const scrollOffset = 0.25 * plotSeqFullWidth.current;
+        if (direction === 'left') {
+          plotRef.current.scrollLeft += scrollOffset;
+        } else {
+          plotRef.current.scrollLeft -= scrollOffset;
+        }
       }
     });
 
@@ -477,24 +487,21 @@ function App() {
 
   // Sequence box scroll handler, handles infinite scroll for both seqbox and plot
   const handleSeqBoxScroll = async () => {
-    // don't scroll if replacing
-    if (isReplacing) return;
-
-    const now = Date.now();
-    if (now - lastScrollTime < throttleInterval) return; // Throttle updates
-
-    const seqElem = seqBoxRef.current;
-    const scroll_left = seqElem.scrollLeft;
-    const scrollPercent = scroll_left / scrollLeftMax.current;
-
-    const coords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i, strand));
-    setViewCoords(coords);
-    // udpate reference tracker
-    scrollLeft.current = scroll_left;
-    setCommonScrollPercent(scrollPercent);
-
     // Sync plot scrolling
     if (!isReplacing && scrollingBox.current === 'seqBox') {
+      const now = Date.now();
+      if (now - lastScrollTime < throttleInterval) return; // Throttle updates
+
+      const seqElem = seqBoxRef.current;
+      const scroll_left = seqElem.scrollLeft;
+      const scrollPercent = scroll_left / scrollLeftMax.current;
+
+      const coords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i, strand));
+      setViewCoords(coords);
+      // udpate reference tracker
+      scrollLeft.current = scroll_left;
+      setCommonScrollPercent(scrollPercent);
+
       if (is1kMode) {
         // seq box and plot align at middle point, when the scroll bar centers at 50%, the two coords align perfectly.
         // use 0.5 as anchor point to sync the two divs
@@ -520,11 +527,61 @@ function App() {
     }
   };
 
-  // Plot scroll handler, only syncs
-  // other functionalities are done via scrolling seqbox
-  const handlePlotScroll = () => {
-    if (!is1kMode && scrollingBox.current === 'plot' && !isReplacing) {
-      seqBoxRef.current.scrollLeft = plotRef.current.scrollLeft;
+  // Factor to slow down scrolling in plot reference (e.g., 5x slower)
+  const scrollSlowdownFactor = 0.08;
+
+  // Intercept scrolling and slow it down
+  const slowPlotScroll = (event) => {
+    event.preventDefault(); // Prevent default fast scrolling
+    plotRef.current.scrollLeft += event.deltaY * scrollSlowdownFactor; // Adjust scroll speed
+    plotRef.current.scrollLeft += event.deltaX * scrollSlowdownFactor; // Adjust scroll speed
+  };
+
+  // Attach event listener for wheel-based scrolling (mouse & trackpad)
+  useEffect(() => {
+    if (is1kMode) {
+      const plotElement = plotRef.current;
+      if (plotElement) {
+        plotElement.addEventListener("wheel", slowPlotScroll, { passive: false }); // Prevent default fast scrolling
+      }
+      return () => {
+        if (plotElement) {
+          plotElement.removeEventListener("wheel", slowPlotScroll);
+        }
+      };
+    }
+  }, [is1kMode]);
+
+  // Plot scroll handle
+  const handlePlotScroll = async () => {
+    // don't scroll if replacing
+    if (!isReplacing && scrollingBox.current === 'plot') {
+      const now = Date.now();
+      if (now - lastScrollTime < throttleInterval) return; // Throttle updates
+
+      const scroll_left = plotRef.current.scrollLeft;
+      const plotScrollPercent = scroll_left / plotRefScrollLeftMax.current;
+      const seqBoxScrollPercent = ((plotScrollPercent - 0.5) / plotToBoxScrollRatio.current + 0.5);
+      const coords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, seqBoxScrollPercent, i, strand));
+      const scrollPosition = seqBoxScrollPercent * scrollLeftMax.current;
+      setViewCoords(coords);
+      setCommonScrollPercent(seqBoxScrollPercent);
+      // scrollLeft.current = scrollPosition;
+
+      if (is1kMode) {
+
+        if (plotScrollPercent < 0.05) {
+          await infiniteScroll1k('left');
+        } else if (plotScrollPercent > 0.95) {
+          await infiniteScroll1k('right');
+        } else {
+          seqBoxRef.current.scrollTo({ left: scrollPosition });
+          colorBoxRef.current.scrollTo({ left: scroll_left });
+          // scrollLeft.current = scroll_left;
+        }
+      } else {
+        seqBoxRef.current.scrollTo({ left: scroll_left });
+      }
     }
   };
 
@@ -1124,7 +1181,7 @@ function App() {
           </div>
 
           {/* squeeze all 1k sequences */}
-          { is1kMode && <div className='relative pb-1 mb-1'>
+          {is1kMode && <div className='relative pb-1 mb-1'>
             {/* middle line */}
             <div
               className="absolute w-[2px] bg-gray-400 top-0 bottom-0"
@@ -1226,7 +1283,7 @@ function App() {
                       config={{ responsive: false }}
                     />
                     {/* Full Box */}
-                    {showCentralLine  && is1kMode && <div
+                    {showCentralLine && is1kMode && <div
                       className="absolute top-1 bottom-1 border-2 border-dashed border-green-500"
                       style={{
                         left: `${50 - seqBoxBorderHalf.current}%`, // Left edge
