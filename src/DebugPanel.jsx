@@ -1,6 +1,6 @@
 import React from "react";
 
-const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, fullPlotDataMat, fullAnnoColors, fullTooltips, fullPlotStart, fullPlotEnd, isPlotInited, colorBoxRef, oneKCharWidth }) => {
+const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, fullPlotDataMat, fullAnnoColors, fullTooltips, fullPlotStart, fullPlotEnd, isPlotInited, colorBoxRef, oneKCharWidth }) => {
 
     return (
         <>
@@ -9,7 +9,7 @@ const DebugPanel = ({ boxSeqFullWidth, boxWidth, viewSeqLen, commonScrollPercent
                 <ul className="space-y-2 text-sm">
                     <li><span> scrollLeft </span> {`${scrollLeft.current}`}</li>
                     <li><span> scrollLeftMax </span> {`${scrollLeftMax.current}`}</li>
-                    <li><span> scroll percent</span> {commonScrollPercent}</li>
+                    {/* <li><span> scroll percent</span> {commonScrollPercent}</li> */}
                     <li><span> anno color box width</span> {plotLayout && colorBoxRef.current ? colorBoxRef.current.scrollWidth : 0}</li>
                     <li><span> each char, 2k char: </span> {oneKCharWidth}, {oneKCharWidth * 2000}</li>
                     <li><span> box view width:</span> {boxWidth.current}</li>
