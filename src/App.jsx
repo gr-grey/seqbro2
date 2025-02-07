@@ -274,7 +274,6 @@ function App() {
       scrollLeft.current = scroll_left;
       scrollLeftMax.current = leftEnd;
 
-
       // update plot width status
       const eachCharWidth = Math.ceil(box_w * 2 / plotSeqLen);
       const plotFullWidth = eachCharWidth * plotSeqLen;
@@ -294,7 +293,7 @@ function App() {
 
       if (is1kMode) {
         relayout({ width: plotFullWidth });
-        // // sync scrolling point
+        // sync scrolling point
         // Wait for the DOM to update
         requestAnimationFrame(() => {
           const scrollPosition = ((scrollPercent - 0.5) * ratio + 0.5) * plotLmax;
@@ -450,11 +449,12 @@ function App() {
           seqBoxElem.scrollLeft -= scrollOffset;
         }
       } else {
-        const scrollOffset = 0.25 * plotSeqFullWidth.current;
+        // const scrollOffset = 0.25 * plotSeqFullWidth.current;
+        const scrollPosition = 0.55 * plotRefScrollLeftMax.current;
         if (direction === 'left') {
-          plotRef.current.scrollLeft += scrollOffset;
+          plotRef.current.scrollLeft = scrollPosition;
         } else {
-          plotRef.current.scrollLeft -= scrollOffset;
+          plotRef.current.scrollLeft = scrollPosition;
         }
       }
     });
@@ -482,140 +482,6 @@ function App() {
     }
   };
 
-  ///////////////////////////////////////////////////////////////
-  // useEffect(() => {
-  //   let isLoading = false; // Prevents overlapping async calls
-
-  //   const seqBoxSyncScrollListener = () => {
-  //     if (scrollingBox.current === 'seqBox') {
-  //       const seqScrollPos = seqBoxRef.current.scrollLeft;
-  //       if (is1kMode) {
-  //         const seqScrollPercent = seqScrollPos / scrollLeftMax.current;
-  //         const plotScrollPercent = (seqScrollPercent - 0.5) * plotToBoxScrollRatio.current + 0.5;
-
-  //         if (plotScrollPercent < 0.05) {
-  //           if (!isLoading) {
-  //             isLoading = true;
-  //             infiniteScroll1k('left').then(() => { isLoading = false; });
-  //           }
-  //         } else if (plotScrollPercent > 0.95) {
-  //           if (!isLoading) {
-  //             isLoading = true;
-  //             infiniteScroll1k('right').then(() => { isLoading = false; });
-  //           }
-  //         } else {
-  //           plotRef.current.scrollLeft = plotScrollPercent * plotRefScrollLeftMax.current;
-  //           // const coords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, seqScrollPercent, i, strand));
-  //           // setViewCoords(coords);
-  //         }
-
-  //       } else {
-  //         plotRef.current.scrollLeft = seqScrollPos;
-  //       }
-  //     }
-  //   };
-
-  //   const plotSyncScrollListener = () => {
-  //     if (scrollingBox.current === "plot") {
-  //       const plotScrollPos = plotRef.current.scrollLeft;
-  //       seqBoxRef.current.scrollLeft = plotScrollPos; // Exact position syncing for now
-  //     }
-  //   };
-
-  //   // Attach event listeners
-  //   const seqElement = seqBoxRef.current;
-  //   const plotElement = plotRef.current;
-  //   if (seqElement) {
-  //     seqElement.addEventListener("scroll", seqBoxSyncScrollListener);
-  //   }
-  //   if (plotElement) {
-  //     plotElement.addEventListener("scroll", plotSyncScrollListener);
-  //   }
-
-  //   // Cleanup function to remove event listener
-  //   return () => {
-  //     if (seqElement) {
-  //       seqElement.removeEventListener("scroll", seqBoxSyncScrollListener);
-  //     }
-  //     if (plotElement) {
-  //       plotElement.removeEventListener("scroll", plotSyncScrollListener);
-  //     }
-  //   };
-  // }, []);
-  ///////////////////////////////////////////////////////////////
-
-  // useEffect(() => {
-  //   const seqElement = seqBoxRef.current;
-  //   if (!seqElement) return;
-
-  //   // Attach the main scroll event listener
-  //   seqElement.addEventListener("scroll", handleSeqBoxScroll);
-
-  //   let timeoutId = null;
-
-  //   const updateViewCoords = () => {
-  //     if (timeoutId || isReplacing) return; // Prevent multiple calls before timeout
-
-  //     timeoutId = setTimeout(() => {
-  //       setViewCoords(viewCoordsRef.current);
-  //       timeoutId = null; // Reset timeout after updating
-  //     }, 500); // Update at most once every 50ms
-  //   };
-
-  //   seqElement.addEventListener("scroll", updateViewCoords);
-
-  //   return () => {
-  //     seqElement.removeEventListener("scroll", handleSeqBoxScroll);
-  //     seqElement.removeEventListener("scroll", updateViewCoords);
-  //     clearTimeout(timeoutId);
-  //   };
-  // }, []);
-
-  // const throttle = (func, limit) => {
-  //   let lastFunc;
-  //   let lastRan;
-  //   return function (...args) {
-  //     if (!lastRan) {
-  //       func.apply(this, args);
-  //       lastRan = Date.now();
-  //     } else {
-  //       clearTimeout(lastFunc);
-  //       lastFunc = setTimeout(() => {
-  //         if (Date.now() - lastRan >= limit) {
-  //           console.log('time (ms)', Date.now() - lastRan);
-  //           func.apply(this, args);
-  //           lastRan = Date.now();
-  //         }
-  //       }, limit - (Date.now() - lastRan));
-  //     }
-  //   };
-  // };
-  // const throttle = (func, limit) => {
-  //   let lastRan = 0;
-  //   let timeout;
-
-  //   return function (...args) {
-  //     const now = Date.now();
-  //     if (now - lastRan >= limit) {
-  //       func.apply(this, args);
-  //       lastRan = now;
-  //     } else if (!timeout) {
-  //       timeout = setTimeout(() => {
-  //         func.apply(this, args);
-  //         lastRan = Date.now();
-  //         timeout = null; // Reset timeout
-  //       }, limit - (now - lastRan));
-  //     }
-  //   };
-  // };
-
-  // const throttledSetViewCoords = throttle((scrollPercent) => {
-  //   const coords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i, strand));
-  //   setViewCoords(coords);
-  // }, 2000); // update frequency upper limit
-
-
-  // const updateTimeout = useRef(null);
   const scrollTimeout = useRef(null); // To track when scrolling stops
 
   // Sequence box scroll handler, handles infinite scroll for both seqbox and plot
@@ -624,19 +490,6 @@ function App() {
     if (!isReplacing && scrollingBox.current === 'seqBox') {
       const scroll_left = seqBoxRef.current.scrollLeft;
       const scrollPercent = scroll_left / scrollLeftMax.current;
-
-      // // Throttle updates
-      // const now = Date.now();
-      // const throttleTime = 500; // Limit updates to once every 100ms
-
-      // if (now - lastUpdateTime.current >= throttleTime) {
-      //   // Update immediately if enough time has passed
-      //   const coords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i, strand));
-      //   setViewCoords(coords);
-      //   lastUpdateTime.current = now;
-      // }
-
-      
 
       if (is1kMode) {
         // seq box and plot align at middle point, when the scroll bar centers at 50%, the two coords align perfectly.
@@ -663,19 +516,21 @@ function App() {
         const coords = coordTicks.map(i => getViewCoords(boxStart.current, boxSeqLen, viewSeqLen.current, scrollPercent, i, strand));
         setViewCoords(coords);
       }, 50); // Slightly longer delay to catch the stop
-      // }, throttleTime + 50); // Slightly longer delay to catch the stop
 
     }
   };
 
-  // Factor to slow down scrolling in plot reference (e.g., 5x slower)
-  const scrollSlowdownFactor = 0.06;
-
+  
   // Intercept scrolling and slow it down
   const slowPlotScroll = (event) => {
+    // slow down scrolling in plot reference (e.g., 5x slower)
+    const scrollSlowdownFactor = 0.06;
+    const percent = plotPercent.current;
     event.preventDefault(); // Prevent default fast scrolling
-    plotRef.current.scrollLeft += event.deltaY * scrollSlowdownFactor; // Adjust scroll speed
-    plotRef.current.scrollLeft += event.deltaX * scrollSlowdownFactor; // Adjust scroll speed
+    if (percent > 0.05 && percent < 0.95) {
+      plotRef.current.scrollLeft += event.deltaY * scrollSlowdownFactor; // Adjust scroll speed
+      plotRef.current.scrollLeft += event.deltaX * scrollSlowdownFactor; // Adjust scroll speed
+    }
   };
 
   // Attach event listener for wheel-based scrolling (mouse & trackpad)
@@ -691,6 +546,8 @@ function App() {
     };}
   }, [is1kMode]);
 
+  const plotPercent = useRef(0);
+
   // Plot scroll handle
   const handlePlotScroll = async () => {
     // don't scroll if replacing
@@ -699,6 +556,7 @@ function App() {
       const scroll_left = plotRef.current.scrollLeft;
       const plotScrollPercent = scroll_left / plotRefScrollLeftMax.current;
       const seqBoxScrollPercent = ((plotScrollPercent - 0.5) / plotToBoxScrollRatio.current + 0.5);
+      plotPercent.current = plotScrollPercent;
 
       if (is1kMode) {
 
@@ -825,7 +683,6 @@ function App() {
   // use inference results for annotations
   // when udpate, we slice left or right half of the result extend it to the current array
   const runAnnoProcessing = async (results, start, end, strand, colorHslArr, colorThreshold, motifNames) => {
-    // remove slicing test
     try {
       // Collect motif scores
       const motifScores = [];
@@ -930,7 +787,7 @@ function App() {
     const xs = strand === '+' ? range(start, end) : range(end, start, -1); // Reverse coordinates for '-' strand
 
     // Loop through the trace configuration list with indexes
-    const test_traces = plotConfig.traces.map((traceConfig, index) => {
+    const plotTraces = plotConfig.traces.map((traceConfig, index) => {
       // Extract y values from the corresponding row in the matrix
       const yData = plotDataMatrix[index];
       if (!yData) return null; // Skip if yData is unavailable
@@ -948,7 +805,7 @@ function App() {
     });
 
     // Filter out any null traces (in case of missing data)
-    return test_traces.filter(trace => trace !== null);
+    return plotTraces.filter(trace => trace !== null);
   };
 
   const relayout = (updates) => {
@@ -991,7 +848,6 @@ function App() {
   useEffect(() => {
     const initPlot = async () => {
       setIsPlotInited(false);
-      // testing 2k plot
       // pad to keep same length after convolution
       const convOffset = puffinConfig.current.puffinOffset;
       const [plotViewStart, plotViewEnd] = [boxStart.current, boxEnd.current];
@@ -1109,20 +965,6 @@ function App() {
       initPlotBuffers();
     }
   }, [isPlotInited]);
-
-  // const getPlotLinePercentage = (commonScrollPercent) => {
-  //   const percent = (commonScrollPercent * (boxSeqLen - viewSeqLen.current) + viewSeqLen.current / 2) / boxSeqLen;
-  //   // adjust for left margin
-  //   const fullLen = boxWidth.current - 2 * plotLeftMargin;
-  //   const adjustedPercent = (plotLeftMargin + percent * fullLen) / boxWidth.current;
-  //   return adjustedPercent * 100;
-  // };
-
-  // const getBoxLinePercentage = (commonScrollPercent) => {
-  //   const midPercent = (commonScrollPercent * (boxSeqLen - viewSeqLen.current) + viewSeqLen.current / 2) / boxSeqLen;
-  //   const width = viewSeqLen.current / 2 / boxSeqLen;
-  //   return [(midPercent - width) * 100, midPercent * 100, width * 2 * 100];
-  // }
 
   // tracking these values
   const debugVars = { boxSeqFullWidth, boxWidth, viewSeqLen, fullStart, fullEnd, boxStart, boxEnd, fullSeq, boxSeq, genome, chromosome, strand, tooltips, is1kMode, scrollingBox, scrollLeft, scrollLeftMax, viewCoords, plotDivHeight, plotLayout, showCentralLine, fullPlotDataMat, fullAnnoColors, fullTooltips, fullPlotStart, fullPlotEnd, isPlotInited, colorBoxRef, oneKCharWidth };
