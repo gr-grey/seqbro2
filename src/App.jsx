@@ -9,24 +9,35 @@ import DallianceViewer from './DallianceViewer';
 import Plot from 'react-plotly.js';
 import useDebounce from './useDebounce';
 import { range, encodeSequence, getViewCoords, fetchSequence, getSliceIndicesFromCoords, hexToHsl, hslToCss, } from './utils';
+import { useSearchParams } from 'react-router-dom';
 
 function App() {
 
   // NavBar hamburger button folds genome form
   const [isGenomeFormFolded, setIsGenomeFormFolded] = useState(false)
+  
   // Genome form variables
-  const [genome, setGenome] = useState("hg38")
-  const [chromosome, setChromosome] = useState("chr7")
-  const [centerCoordinate, setCenterCoordinate] = useState(5530600)
-  const [strand, setStrand] = useState('-')
-  const [gene, setGene] = useState('ACTB')
+  // State initialization from URL parameters
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [genome, setGenome] = useState(() => searchParams.get('g') || "hg38");
+  const [chromosome, setChromosome] = useState(() => searchParams.get('c') || "chr7");
+  const [centerCoordinate, setCenterCoordinate] = useState(() => {
+    const pos = searchParams.get('pos');
+    return pos ? Math.max(1, parseInt(pos)) : 5530600;
+  });
+  const [strand, setStrand] = useState(() => {
+    const s = searchParams.get('s');
+    return ['+', '-'].includes(s) ? s : '-';
+  });
+  const [gene, setGene] = useState(searchParams.get('gene') || 'ACTB');
+
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, centerCoordinate, setCenterCoordinate, strand, setStrand, gene, setGene }
 
   // sequence coords system
   const boxSeqHalfLen = 1000
   const boxSeqLen = 2 * boxSeqHalfLen
-  const boxStartCoord = useRef(centerCoordinate - boxSeqHalfLen)
-  const boxEndCoord = useRef(centerCoordinate + boxSeqHalfLen)
+  const boxStartCoord = useRef(null)
+  const boxEndCoord = useRef(null)
 
   // Sequence box UI
   const seqbox1 = useRef(null)
@@ -54,13 +65,28 @@ function App() {
   const [plotData, setPlotData] = useState(null)
   const [plotLayout, setPlotLayout] = useState(null)
 
+  // URL update effect
+  useEffect(() => {
+    const params = new URLSearchParams({
+      g: genome,
+      c: chromosome,
+      pos: centerCoordinate.toString(),
+      s: strand
+    });
+    
+    // Only update if different from current URL
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [genome, chromosome, centerCoordinate, strand, searchParams, setSearchParams]);
+
   useEffect(() => {
     loadModelAndConfig('/puffin.config.json', configs, inferenceSession, annoSession, setIsOnnxSessionLoaded)
   }, []);
 
   useEffect(() => {
-    initSequence(boxStartCoord, boxEndCoord, genome, chromosome, strand, setBox1Seq, setIsSeqInited, seqbox1, boxSeqLen)
-  }, [genome, chromosome, strand])
+    initSequence(genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1)
+  }, [genome, chromosome, centerCoordinate, strand])
 
   // load plot once sequence and inference sessions are ready
   useEffect(() => {
@@ -167,16 +193,20 @@ const loadModelAndConfig = async (configFile, configs, inferenceSession, annoSes
 };
 
 // init function: sequence
-const initSequence = async (boxStartCoord, boxEndCoord, genome, chromosome, strand, setBox1Seq, setIsSeqInited, seqboxRef, boxSeqLen) => {
+const initSequence = async (genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1) => {
   setIsSeqInited(false)
-  const sequence = await fetchSequence(boxStartCoord.current, boxEndCoord.current, genome, chromosome, strand)
+  const [start, end] = [centerCoordinate - boxSeqHalfLen, centerCoordinate + boxSeqHalfLen]
+  const sequence = await fetchSequence(start, end, genome, chromosome, strand)
   setBox1Seq(sequence)
+  boxStartCoord.current = start
+  boxEndCoord.current = end
+
   setIsSeqInited(true)
   // scroll seqbox to 50% after sequence inited
   requestAnimationFrame(() => {
-    const availableScroll = seqboxRef.current.scrollWidth - seqboxRef.current.clientWidth
+    const availableScroll = seqbox1.current.scrollWidth - seqbox1.current.clientWidth
     const targetScroll = (0.5 + 0.5 / boxSeqLen) * availableScroll
-    seqboxRef.current.scrollLeft = targetScroll
+    seqbox1.current.scrollLeft = targetScroll
   })
 }
 
