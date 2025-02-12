@@ -1,7 +1,7 @@
 modelPath: /puffinFantomCage.onnx
 # anno model gets column max, index and all max
 annoModelPath: /max_index.onnx
-puffinOffset: 325
+convOffset: 325
 title: Puffin Fantom Cage
 # anno scores that's used as input to anno model
 annoInputs:

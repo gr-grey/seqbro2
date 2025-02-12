@@ -1,7 +1,7 @@
 {
     "modelPath": "/puffinFantomCage.onnx",
     "annoModelPath": "/max_index.onnx",
-    "puffinOffset": 325,
+    "convOffset": 325,
     "title": "Puffin Fantom Cage",
     "annoInputs": [
         "motif1sc",

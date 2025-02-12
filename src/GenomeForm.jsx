@@ -5,14 +5,14 @@ const labelStyle = "block text-sm font-md text-gray-700";
 const fieldStyle = "w-full rounded-md border border-gray-300 p-2";
 
 
-const GenomeForm = ({ genome, setGenome, chromosome, setChromosome, coordinate, setCoordinate, strand, setStrand, gene, setGene }) => {
+const GenomeForm = ({ genome, setGenome, chromosome, setChromosome, centerCoordinate, setCenterCoordinate, strand, setStrand, gene, setGene }) => {
 
     // shared/ global coords only gets updated after user stop editting for 800ms
-    const [tempCoordinate, setTempCoordinate] = useState(coordinate);
+    const [tempCoordinate, setTempCoordinate] = useState(centerCoordinate);
     const debouncedCoordinate = useDebounce(tempCoordinate, 500);
 
     // update real coords
-    useEffect(() => { setCoordinate(debouncedCoordinate); }, [debouncedCoordinate]);
+    useEffect(() => { setCenterCoordinate(debouncedCoordinate); }, [debouncedCoordinate]);
 
     return (
         <div>
