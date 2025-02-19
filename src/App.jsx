@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import './App.css';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
@@ -10,12 +10,13 @@ import Plot from 'react-plotly.js';
 import useDebounce from './useDebounce';
 import { range, encodeSequence, getViewCoords, fetchSequence, getSliceIndicesFromCoords, hexToHsl, hslToCss, } from './utils';
 import { useSearchParams } from 'react-router-dom';
+import throttle from 'lodash/throttle'
 
 function App() {
 
   // NavBar hamburger button folds genome form
   const [isGenomeFormFolded, setIsGenomeFormFolded] = useState(false)
-  
+
   // Genome form variables
   // State initialization from URL parameters
   const [searchParams, setSearchParams] = useSearchParams();
@@ -34,10 +35,51 @@ function App() {
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, centerCoordinate, setCenterCoordinate, strand, setStrand, gene, setGene }
 
   // sequence coords system
-  const boxSeqHalfLen = 1000
+  const boxSeqHalfLen = 2000
   const boxSeqLen = 2 * boxSeqHalfLen
   const boxStartCoord = useRef(null)
   const boxEndCoord = useRef(null)
+
+  // box and plot share the same coordinate system.
+  // start - mid - end : 4k : 4k : 4k
+  // always showing the mid part, update start and end
+  // 1k overlapping, 0-4k : 3-7k : 6-10k
+  // shift 3k at a time, pad 3k sequence at a time
+
+  // full sequence (pad according to the model offset)
+  // const fullSequence = useRef(null)
+  const overlappingLen = 1500
+  // const fullSeqStart = useRef(null)
+  // const fullSeqEnd = useRef(null)
+
+  // three chunks: s (start), m (middle) and e (end)
+  // based on coordinate value from small to large, instead of left and right, to avoid minus strand confusion
+  // mid chunck inited with sequence and plots
+  // start and end chuncks inited in buffers
+  const sStart = useRef(null)
+  const sEnd = useRef(null)
+  const mStart = useRef(null)
+  const mEnd = useRef(null)
+  const eStart = useRef(null)
+  const eEnd = useRef(null)
+  // sequence
+  const sSeq = useRef(null)
+  const mSeq = useRef(null)
+  const eSeq = useRef(null)
+  // plots
+  const sPlotData = useRef(null)
+  const mPlotData = useRef(null)
+  const ePltoData = useRef(null)
+  const sTooltips = useRef(null)
+  const mTooltips = useRef(null)
+  const eTooltips = useRef(null)
+  const sAnno = useRef(null)
+  const mAnno = useRef(null)
+  const eEnno = useRef(null)
+
+  // debug UI
+  const [debug1, setDebug1] = useState(null)
+  const [debug2, setDebug2] = useState(null)
 
   // Sequence box UI
   const seqbox1 = useRef(null)
@@ -51,19 +93,50 @@ function App() {
   const [isSeqInited, setIsSeqInited] = useState(false)
   const [isOnnxSessionLoaded, setIsOnnxSessionLoaded] = useState(false)
   const [isPlotInited, setIsPlotInited] = useState(false)
+  const [isBufferInited, setIsBufferInited] = useState(false)
 
   // onnx sessions for inference and annotation calculation
   const configs = useRef(null)
   const inferenceSession = useRef(null)
   const annoSession = useRef(null)
 
-  // generating plots
+  // settings to get plot data, tooltips and anno colors
+  const inferenceOffset = useRef(null)
   const yDataKeys = useRef(null)
+  const motifNames = useRef(null)
+  const motifHslColors = useRef(null)
+  const colorThreshold = useRef(null)
 
   // plot box
   const plotbox1 = useRef(null)
   const [plotData, setPlotData] = useState(null)
   const [plotLayout, setPlotLayout] = useState(null)
+
+  const plotbox2 = useRef(null)
+  const [plotData2, setPlotData2] = useState(null)
+
+  const [plot1Z, setPlot1Z] = useState(2)
+  const [plot2Z, setPlot2Z] = useState(1)
+
+  // tracking sizes, width for both sequence and plot box
+  const boxWindowWidth = useRef(null)
+  const seqBoxScrollWidth = useRef(null)
+  const plotBoxScrollWidth = useRef(null)
+  // scrollWidth - clientWidth
+  const seqBoxAvailableScroll = useRef(null)
+  const plotBoxAvailableScroll = useRef(null)
+
+  // characters
+  const plotWindowSeqLen = useRef(null)
+
+  const swapLThreshold = 0.05
+  const swapRThreshold = 0.95
+  // for plot only, cause 
+  const plotScrollLEdge = useRef(null)
+  const plotScrollREdge = useRef(null)
+
+  // wether changing visibility
+  const isTransitioning = useRef(false)
 
   // URL update effect
   useEffect(() => {
@@ -73,7 +146,7 @@ function App() {
       pos: centerCoordinate.toString(),
       s: strand
     });
-    
+
     // Only update if different from current URL
     if (params.toString() !== searchParams.toString()) {
       setSearchParams(params, { replace: true });
@@ -85,15 +158,101 @@ function App() {
   }, []);
 
   useEffect(() => {
-    initSequence(genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1)
+    initSequence(genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1, mStart, mEnd, mSeq, boxWindowWidth, plotBoxScrollWidth)
   }, [genome, chromosome, centerCoordinate, strand])
 
   // load plot once sequence and inference sessions are ready
   useEffect(() => {
     if (isSeqInited && isOnnxSessionLoaded) {
-      initPlot(setIsPlotInited, configs, inferenceSession, annoSession, boxStartCoord, boxEndCoord, genome, chromosome, strand, setTooltips, setAnnoColors, setPlotData, setPlotLayout, boxSeqLen, plotbox1, yDataKeys)
+      initPlot(setIsPlotInited, configs, inferenceSession, annoSession, boxStartCoord, boxEndCoord, genome, chromosome, strand, setTooltips, setAnnoColors, setPlotData, setPlotLayout, boxSeqLen, plotbox1, yDataKeys, inferenceOffset, motifNames, motifHslColors, colorThreshold, plotBoxScrollWidth, plotBoxAvailableScroll, plotScrollLEdge, plotScrollREdge, swapLThreshold, swapRThreshold, plotWindowSeqLen)
     }
   }, [isSeqInited, isOnnxSessionLoaded])
+
+  // once plot inited, set buffers
+  useEffect(() => {
+    const initBuffers = async () => {
+      // 3 sections, 2 overlapping, so actually should be overlapping half len * 2 = over lapping len
+      // const fullSeqUnpaddedHalfLen = boxSeqHalfLen * 3 - overlappingLen
+      // const fullSeqHalfLen = fullSeqUnpaddedHalfLen + inferenceOffset.current
+      // const [fullStart, fullEnd] = [centerCoordinate - fullSeqHalfLen, centerCoordinate + fullSeqHalfLen]
+      // const seq = await fetchSequence(fullStart, fullEnd, genome, chromosome, strand)
+
+      const offset = inferenceOffset.current
+      // start buffer
+      const s_start = mStart.current - boxSeqLen + overlappingLen
+      const s_end = s_start + boxSeqLen
+      const sSeqPadded = await fetchSequence(s_start - offset, s_end + offset, genome, chromosome, strand)
+      const s_seq = sSeqPadded.slice(offset, -offset)
+
+      const s_inference = await runInference(sSeqPadded, inferenceSession)
+      const sPlotMat = yDataKeys.current.map(key => Array.from(s_inference[key].data))
+      const sPlotData = getPlotData(sPlotMat, s_start, s_end, strand, configs.current)
+
+      setPlotData2(sPlotData)
+
+      setTimeout(() => {
+        const availLen = boxSeqLen - plotWindowSeqLen.current
+        const plot2Percent = (swapRThreshold * availLen - boxSeqLen + overlappingLen) / availLen
+        plotbox2.current.scrollLeft = plotBoxAvailableScroll.current * plot2Percent
+        console.log('scroll plot box 2 by ', plot2Percent)
+        setIsBufferInited(true)
+      }, 10);
+
+    }
+    if (isPlotInited) {
+      initBuffers()
+    }
+  }, [isPlotInited])
+
+  const handlePlotBoxScroll = useCallback(throttle((e) => {
+    if (isTransitioning.current) return;
+
+    const scrollLeft = e.target.scrollLeft;
+
+    if (scrollLeft >= plotScrollREdge.current) {
+      isTransitioning.current = true;
+
+      // Switch visibility
+      setPlot2Z(2)
+      setPlot1Z(1)
+
+      // Reset transition lock after browser repaint
+      requestAnimationFrame(() => {
+        isTransitioning.current = false;
+      });
+    }
+  }, 100), []);
+
+  // slow down scrolling speed to 0.2 of default
+  const slowPlotScroll1 = useCallback(
+    slowerScrollHandler(plotbox1, 0.2),
+    [plotbox1]
+  );
+
+  const slowPlotScroll2 = useCallback(
+    slowerScrollHandler(plotbox2, 0.2),
+    [plotbox2]
+  );
+  // Attach listeners to both containers
+  useEffect(() => {
+
+    const plot1 = plotbox1.current;
+    const plot2 = plotbox2.current;
+
+    if (isPlotInited) {
+      plot1.addEventListener('wheel', slowPlotScroll1, { passive: false });
+    }
+
+    if (isBufferInited) {
+      plot2.addEventListener('wheel', slowPlotScroll2, { passive: false });
+    }
+
+    return () => {
+      plot1?.removeEventListener('wheel', slowPlotScroll1);
+      plot2?.removeEventListener('wheel', slowPlotScroll2);
+    };
+  }, [isPlotInited, isBufferInited, slowPlotScroll1, slowPlotScroll2]);
+
 
   return (
     <>
@@ -129,13 +288,28 @@ function App() {
             </div>
           </div>
 
+          <button className='bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded m-1'
+            onClick={() => {
+              setPlot1Z(2)
+              setPlot2Z(1)
+            }}
+          > Show box1</button>
+
+          <button className='bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded m-1'
+            onClick={() => {
+              setPlot1Z(1)
+              setPlot2Z(2)
+            }}
+          > Show box2</button>
+
+
           {/* Plot box */}
           {plotData ?
             <div className='mt-2'>
               {/* Plot title */}
               {<div className="w-full h-4 mb-4 text-xl flex items-center justify-center">{configs.current.title}</div>}
 
-              <div className='relative' style={{ height: `${515}px` }}>
+              <div className='relative h-[515px]'>
 
                 {configs.current.subtitles.map((title, index) => (
                   <div
@@ -149,14 +323,15 @@ function App() {
                     {title}
                   </div>
                 ))}
+                {/* Vertical center line in plot box */}
+                <div className="absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%] z-10" />
 
                 <div
-                  className="plot-box overflow-x-auto"
+                  className="plot-box-1 absolute top-0 left-0 w-full overflow-x-auto border"
+                  style={{ zIndex: plot1Z }}
                   ref={plotbox1}
-
+                  onScroll={handlePlotBoxScroll}
                 >
-                  {/* Vertical center line in plot box */}
-                  <div className="absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%] z-10" />
 
                   <Plot
                     data={plotData}
@@ -164,6 +339,21 @@ function App() {
                     config={{ responsive: false }}
                   />
                 </div>
+
+                {plotData2 &&
+                  <div
+                    className="plot-box-1 absolute top-0 left-0  w-full  overflow-x-auto border"
+                    style={{ zIndex: plot2Z }}
+                    ref={plotbox2}
+
+                  >
+                    <Plot
+                      data={plotData2}
+                      layout={plotLayout}
+                      config={{ responsive: false }}
+                    />
+                  </div>}
+
               </div>
             </div>
             : 'Loading...'
@@ -193,7 +383,8 @@ const loadModelAndConfig = async (configFile, configs, inferenceSession, annoSes
 };
 
 // init function: sequence
-const initSequence = async (genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1) => {
+// TODO: merge init sequence and plots together
+const initSequence = async (genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1, mStart, mEnd, mSeq, boxWindowWidth, plotBoxScrollWidth) => {
   setIsSeqInited(false)
   const [start, end] = [centerCoordinate - boxSeqHalfLen, centerCoordinate + boxSeqHalfLen]
   const sequence = await fetchSequence(start, end, genome, chromosome, strand)
@@ -207,6 +398,16 @@ const initSequence = async (genome, chromosome, centerCoordinate, strand, boxSeq
     const availableScroll = seqbox1.current.scrollWidth - seqbox1.current.clientWidth
     const targetScroll = (0.5 + 0.5 / boxSeqLen) * availableScroll
     seqbox1.current.scrollLeft = targetScroll
+
+    // init width trackers
+    boxWindowWidth.current = seqbox1.current.clientWidth
+    const plotPxPerBP = Math.max(Math.ceil(seqbox1.current.clientWidth / 500), 3) * 0.5
+    plotBoxScrollWidth.current = plotPxPerBP * boxSeqLen
+
+    // init middle seq
+    mStart.current = start
+    mEnd.current = end
+    mSeq.current = sequence
   })
 }
 
@@ -306,8 +507,7 @@ const runAnnoProcessing = async (configs, results, annoSession, startCoord, endC
   }
 };
 
-const getPlotData = (plotDataMatrix, startCoord, endCoord, strand, plotConfig) => {
-  const [start, end] = [startCoord.current, endCoord.current]
+const getPlotData = (plotDataMatrix, start, end, strand, plotConfig) => {
   // Generate x values based on strand direction
   const xs = strand === '+' ? range(start, end) : range(end, start, -1) // Reverse coordinates for '-' strand
 
@@ -333,7 +533,7 @@ const getPlotData = (plotDataMatrix, startCoord, endCoord, strand, plotConfig) =
   return plotTraces.filter(trace => trace !== null);
 };
 
-const initPlot = async (setIsPlotInited, configs, inferenceSession, annoSession, boxStartCoord, boxEndCoord, genome, chromosome, strand, setTooltips, setAnnoColors, setPlotData, setPlotLayout, boxSeqLen, plotbox1, yDataKeys) => {
+const initPlot = async (setIsPlotInited, configs, inferenceSession, annoSession, boxStartCoord, boxEndCoord, genome, chromosome, strand, setTooltips, setAnnoColors, setPlotData, setPlotLayout, boxSeqLen, plotbox1, yDataKeys, inferenceOffset, motifNames, motifHslColors, colorThreshold, plotBoxScrollWidth, plotBoxAvailableScroll, plotScrollLEdge, plotScrollREdge, swapLThreshold, swapRThreshold, plotWindowSeqLen) => {
   setIsPlotInited(false)
 
   const convOffset = configs.current.convOffset
@@ -342,16 +542,16 @@ const initPlot = async (setIsPlotInited, configs, inferenceSession, annoSession,
 
   // inference parameters
   const scaledThreshold = configs.current.scaledThreshold
-  const motifNames = []
+  const motifs = []
   const motifColors = []
   for (const entry of configs.current.motifNameColorDict) {
     const [name] = Object.keys(entry)
     const [color] = Object.values(entry)
-    motifNames.push(name); motifColors.push(color)
+    motifs.push(name); motifColors.push(color)
   }
   const colorHslArr = motifColors.map(hex => hexToHsl(hex))
 
-  const [tooltips, annoColors] = await runAnnoProcessing(configs, outputs, annoSession, boxStartCoord, boxEndCoord, strand, colorHslArr, scaledThreshold, motifNames)
+  const [tooltips, annoColors] = await runAnnoProcessing(configs, outputs, annoSession, boxStartCoord, boxEndCoord, strand, colorHslArr, scaledThreshold, motifs)
   setTooltips(tooltips)
   setAnnoColors(annoColors)
 
@@ -360,7 +560,7 @@ const initPlot = async (setIsPlotInited, configs, inferenceSession, annoSession,
   if (outputs) {
     // plot matrix
     const plotMat = plotYKeys.map(key => Array.from(outputs[key].data))
-    const plotData = getPlotData(plotMat, boxStartCoord, boxEndCoord, strand, configs.current)
+    const plotData = getPlotData(plotMat, boxStartCoord.current, boxEndCoord.current, strand, configs.current)
     setPlotData(plotData)
 
     const xaxisLayout = { tickformat: 'd', autorange: strand === '-' ? 'reversed' : true, }
@@ -369,11 +569,13 @@ const initPlot = async (setIsPlotInited, configs, inferenceSession, annoSession,
     for (let i = 0; i < totalPlots; i++) {
       axisLayout[`xaxis${i + 1}`] = xaxisLayout;
     }
+
+    // const pixelPerBasePair = 
     setPlotLayout({
       ...axisLayout,
       height: 515,
       grid: configs.current.grid,
-      width: boxSeqLen * 1.5,
+      width: plotBoxScrollWidth.current,
       template: 'plotly_white',
       margin: { l: 0, r: 0, t: 0, b: 15 },
       showlegend: false,
@@ -384,8 +586,36 @@ const initPlot = async (setIsPlotInited, configs, inferenceSession, annoSession,
   setTimeout(() => {
     const availableScroll = plotbox1.current.scrollWidth - plotbox1.current.clientWidth
     plotbox1.current.scrollLeft = 0.5 * availableScroll
+    // plotbox1.current.scrollLeft = swapRThreshold * availableScroll // 0.95
+    setIsPlotInited(true)
+
+    // init reference
     yDataKeys.current = plotYKeys
+    inferenceOffset.current = convOffset
+    motifNames.current = motifs
+    motifHslColors.current = colorHslArr
+    colorThreshold.current = scaledThreshold
+
+    plotBoxAvailableScroll.current = plotBoxScrollWidth.current - plotbox1.current.clientWidth
+    plotScrollLEdge.current = availableScroll * swapLThreshold
+    plotScrollREdge.current = availableScroll * swapRThreshold
+
+    const windowSeqLen = plotbox1.current.clientWidth / plotBoxScrollWidth.current * boxSeqLen
+    const leftMostTest = (boxSeqLen - windowSeqLen) * swapRThreshold
+    console.log('left should be', boxEndCoord.current - leftMostTest)
+    plotWindowSeqLen.current = windowSeqLen
+
   }, 10);
 }
+
+
+const slowerScrollHandler = (elementRef, slowdownFactor) => (e) => {
+  if (!elementRef.current) return;
+
+  e.preventDefault();
+  const container = elementRef.current;
+  const delta = e.deltaX || e.deltaY; // Prioritize horizontal scroll
+  container.scrollLeft += delta * slowdownFactor;
+};
 
 export default App;
