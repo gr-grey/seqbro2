@@ -44,7 +44,7 @@ function App() {
   // start - mid - end : 4k : 4k : 4k
   // always showing the mid part, update start and end
   // 1k overlapping, 0-4k : 3-7k : 6-10k
-  // shift 3k at a time, pad 3k sequence at a time
+  // shift 3k at a time, get 4k new sequence at a time
 
   // full sequence (pad according to the model offset)
   // const fullSequence = useRef(null)
@@ -120,12 +120,13 @@ function App() {
   const [plotData2, setPlotData2] = useState(null)
   const [plotData3, setPlotData3] = useState(null)
 
-  const [plot1Z, setPlot1Z] = useState(3)
-  const [plot2Z, setPlot2Z] = useState(2)
-  const [plot3Z, setPlot3Z] = useState(1)
+  const initZvalues = [3, 2, 1] // box 1, box 2, box 3, box 1 on top
+  const initBufferPlotBoxMap = { 'mid': 1, 'start': 2, 'end': 3 } // mid seq in box1, start buffer in box2, end buffer in box3
+  const [plot1Z, setPlot1Z] = useState(initZvalues[0])
+  const [plot2Z, setPlot2Z] = useState(initZvalues[1])
+  const [plot3Z, setPlot3Z] = useState(initZvalues[2])
 
-  // at init, mid plot in plotbox1, start buffer in plotbox2, end buffer in plotbox3
-  const bufferPlotBoxMap = useRef({ 'mid': 1, 'start': 2, 'end': 3 })
+  const bufferPlotBoxMap = useRef(initBufferPlotBoxMap)
 
   // tracking sizes, width for both sequence and plot box
   const boxWindowWidth = useRef(null)
@@ -145,8 +146,16 @@ function App() {
   const plotScrollREdge = useRef(null)
 
   // scroll buffers to this position to be ready for swapping, need to change with windowsize
-  const leftBufferStartPos = useRef(null)
-  const rightBufferStartPos = useRef(null)
+  const leftSwappingTriggerPoint = useRef(null)
+  const rightSwappingTriggerPoint = useRef(null)
+
+  // slow down when it get's close to the edge
+  const slowLThreshold = 0.07
+  const slowRThreshold = 0.93
+  const slowScroll = 0.15
+  const slowerScroll = 0.09
+  const leftSlowTriggerPoint = useRef(null)
+  const rightSlowTriggerPoint = useRef(null)
 
   // wether changing visibility
   const isTransitioning = useRef(false)
@@ -172,13 +181,13 @@ function App() {
   }, []);
 
   useEffect(() => {
-    initSequence(genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1, mStart, mEnd, mSeq, boxWindowWidth, plotBoxScrollWidth)
+    initSequence(genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1, mStart, mEnd, mSeq, boxWindowWidth, plotBoxScrollWidth, setIsPlotInited, setIsBufferInited)
   }, [genome, chromosome, centerCoordinate, strand])
 
   // load plot once sequence and inference sessions are ready
   useEffect(() => {
     if (isSeqInited && isOnnxSessionLoaded) {
-      initPlot(setIsPlotInited, configs, inferenceSession, annoSession, boxStartCoord, boxEndCoord, genome, chromosome, strand, setTooltips, setAnnoColors, setPlotData, setPlotLayout, boxSeqLen, plotbox1, yDataKeys, inferenceOffset, motifNames, motifHslColors, colorThreshold, plotBoxScrollWidth, plotBoxAvailableScroll, plotScrollLEdge, plotScrollREdge, swapLThreshold, swapRThreshold, plotWindowSeqLen, mPlotData)
+      initPlot(setIsPlotInited, configs, inferenceSession, annoSession, boxStartCoord, boxEndCoord, genome, chromosome, strand, setTooltips, setAnnoColors, setPlotData, setPlotLayout, boxSeqLen, plotbox1, yDataKeys, inferenceOffset, motifNames, motifHslColors, colorThreshold, plotBoxScrollWidth, plotBoxAvailableScroll, plotScrollLEdge, plotScrollREdge, swapLThreshold, swapRThreshold, plotWindowSeqLen, mPlotData, initZvalues, setPlot1Z, setPlot2Z, setPlot3Z, initBufferPlotBoxMap, bufferPlotBoxMap)
     }
   }, [isSeqInited, isOnnxSessionLoaded])
 
@@ -186,10 +195,6 @@ function App() {
   useEffect(() => {
     const initBuffers = async () => {
       // 3 sections, 2 overlapping, so actually should be overlapping half len * 2 = over lapping len
-      // const fullSeqUnpaddedHalfLen = boxSeqHalfLen * 3 - overlappingLen
-      // const fullSeqHalfLen = fullSeqUnpaddedHalfLen + inferenceOffset.current
-      // const [fullStart, fullEnd] = [centerCoordinate - fullSeqHalfLen, centerCoordinate + fullSeqHalfLen]
-      // const seq = await fetchSequence(fullStart, fullEnd, genome, chromosome, strand)
 
       const offset = inferenceOffset.current
       // start buffer
@@ -253,8 +258,10 @@ function App() {
         eEnd.current = e_end
         ePlotData.current = e_plot_data
 
-        rightBufferStartPos.current = rStartPos
-        leftBufferStartPos.current = lStartPos
+        rightSwappingTriggerPoint.current = rStartPos
+        leftSwappingTriggerPoint.current = lStartPos
+        leftSlowTriggerPoint.current = plotBoxAvailableScroll.current * slowLThreshold
+        rightSlowTriggerPoint.current = plotBoxAvailableScroll.current * slowRThreshold
       }, 10);
 
     }
@@ -304,16 +311,16 @@ function App() {
 
   }
 
-  const scrollBuffers = (startboxnum, endboxnum, plotbox1, plotbox2, plotbox3, strand, leftBufferStartPos, rightBufferStartPos) => {
+  const scrollBuffers = (startboxnum, endboxnum, plotbox1, plotbox2, plotbox3, strand, leftSwappingTriggerPoint, rightSwappingTriggerPoint) => {
     let startPos, endPos
     if (strand === '+') {
       // end buffer on the right
-      endPos = rightBufferStartPos.current
-      startPos = leftBufferStartPos.current
+      endPos = rightSwappingTriggerPoint.current
+      startPos = leftSwappingTriggerPoint.current
     } else {
       // start buffer on the right
-      startPos = rightBufferStartPos.current
-      endPos = leftBufferStartPos.current
+      startPos = rightSwappingTriggerPoint.current
+      endPos = leftSwappingTriggerPoint.current
     }
     // Create an array of refs and use the correct index safely
     const plotBoxes = [plotbox1, plotbox2, plotbox3];
@@ -334,7 +341,7 @@ function App() {
   }
 
   // update buffers afer swapping
-  // const updateBuffers = async (direction, strand, sSeq, mSeq, eSeq, sStart, sEnd, mStart, mEnd, eStart, eEnd, sPlotData, mPlotData, ePlotData, setPlotData, setPlotData2, setPlotdata3, startboxnum, endboxnum, boxSeqLen, overlappingLen, configs, inferenceSession, yDataKeys, startboxnum, endboxnum, plotbox1, plotbox2, plotbox3, leftBufferStartPos, rightBufferStartPos) => {
+  // const updateBuffers = async (direction, strand, sSeq, mSeq, eSeq, sStart, sEnd, mStart, mEnd, eStart, eEnd, sPlotData, mPlotData, ePlotData, setPlotData, setPlotData2, setPlotdata3, startboxnum, endboxnum, boxSeqLen, overlappingLen, configs, inferenceSession, yDataKeys, startboxnum, endboxnum, plotbox1, plotbox2, plotbox3, leftSwappingTriggerPoint, rightSwappingTriggerPoint) => {
   const updateBuffers = async (direction, strand, startboxnum, endboxnum) => {
     isUpdatingBuffers.current = true
     const offset = configs.current.convOffset
@@ -375,7 +382,7 @@ function App() {
       setStartEndPlotData(startboxnum, endboxnum, newSPlotData, newEPlotData)
 
       requestAnimationFrame(() => {
-        scrollBuffers(startboxnum, endboxnum, plotbox1, plotbox2, plotbox3, strand, leftBufferStartPos, rightBufferStartPos)
+        scrollBuffers(startboxnum, endboxnum, plotbox1, plotbox2, plotbox3, strand, leftSwappingTriggerPoint, rightSwappingTriggerPoint)
         isUpdatingBuffers.current = false
       })
 
@@ -403,12 +410,12 @@ function App() {
       sStart.current = newSStart;
       sEnd.current = newSEnd;
       sPlotData.current = newSPlotData;
-      
+
       mSeq.current = newMSeq;
       mStart.current = newMStart;
       mEnd.current = newMEnd;
       mPlotData.current = newMPlotData;
-      
+
       eSeq.current = newESeq;
       eStart.current = newEStart;
       eEnd.current = newEEnd;
@@ -418,7 +425,7 @@ function App() {
       setStartEndPlotData(startboxnum, endboxnum, newSPlotData, newEPlotData)
 
       requestAnimationFrame(() => {
-        scrollBuffers(startboxnum, endboxnum, plotbox1, plotbox2, plotbox3, strand, leftBufferStartPos, rightBufferStartPos)
+        scrollBuffers(startboxnum, endboxnum, plotbox1, plotbox2, plotbox3, strand, leftSwappingTriggerPoint, rightSwappingTriggerPoint)
         isUpdatingBuffers.current = false
       })
 
@@ -430,53 +437,65 @@ function App() {
     if (isTransitioning.current) return;
 
     const scrollLeft = e.target.scrollLeft;
+    const transitionTimeout = 400
 
-    if (scrollLeft >= plotScrollREdge.current && !isUpdatingBuffers.current) {
-      isTransitioning.current = true
+    if (!isUpdatingBuffers.current) {
+      if (scrollLeft > plotScrollREdge.current) {
+        isTransitioning.current = true
+        const direction = 'right'
+        const [z1, z2, z3, startboxnum, endboxnum] = getPlotBoxZValues(direction, strand, bufferPlotBoxMap)
+        // Switch visibility
+        setPlot1Z(z1)
+        setPlot2Z(z2)
+        setPlot3Z(z3)
 
-      const [z1, z2, z3, startboxnum, endboxnum] = getPlotBoxZValues('right', strand, bufferPlotBoxMap)
-      // Switch visibility
-      setPlot1Z(z1)
-      setPlot2Z(z2)
-      setPlot3Z(z3)
+        setTimeout(() => {
+          isTransitioning.current = false
+        }, transitionTimeout)
+        await updateBuffers(direction, strand, startboxnum, endboxnum)
 
-      requestAnimationFrame(() => {
-        isTransitioning.current = false
-      })
+      } else if (scrollLeft < plotScrollLEdge.current) {
+        isTransitioning.current = true
+        const direction = 'left'
+        const [z1, z2, z3, startboxnum, endboxnum] = getPlotBoxZValues(direction, strand, bufferPlotBoxMap)
+        // Switch visibility
+        setPlot1Z(z1)
+        setPlot2Z(z2)
+        setPlot3Z(z3)
 
-      await updateBuffers('right', strand, startboxnum, endboxnum)
+        setTimeout(() => {
+          isTransitioning.current = false
+        }, transitionTimeout)
+        await updateBuffers(direction, strand, startboxnum, endboxnum)
+      }
     }
-  }, 100), []);
+  }, 100), [strand]);
 
   // slow down scrolling speed to 0.2 of default
-  const slowPlotScroll1 = useCallback(
-    slowerScrollHandler(plotbox1, 0.2),
-    [plotbox1]
-  );
+  const slowPlotScroll1 = useCallback(slowerScrollHandler(plotbox1, slowScroll, isTransitioning, slowerScroll, leftSlowTriggerPoint, rightSlowTriggerPoint), [plotbox1])
+  const slowPlotScroll2 = useCallback(slowerScrollHandler(plotbox2, slowScroll, isTransitioning, slowerScroll, leftSlowTriggerPoint, rightSlowTriggerPoint), [plotbox2])
+  const slowPlotScroll3 = useCallback(slowerScrollHandler(plotbox3, slowScroll, isTransitioning, slowerScroll, leftSlowTriggerPoint, rightSlowTriggerPoint), [plotbox3])
 
-  const slowPlotScroll2 = useCallback(
-    slowerScrollHandler(plotbox2, 0.2),
-    [plotbox2]
-  );
   // Attach listeners to both containers
   useEffect(() => {
 
-    const plot1 = plotbox1.current;
-    const plot2 = plotbox2.current;
+    const plot1 = plotbox1.current
+    const plot2 = plotbox2.current
+    const plot3 = plotbox3.current
 
-    if (isPlotInited) {
-      plot1.addEventListener('wheel', slowPlotScroll1, { passive: false });
-    }
+    if (isPlotInited) { plot1.addEventListener('wheel', slowPlotScroll1, { passive: false }) }
 
     if (isBufferInited) {
-      plot2.addEventListener('wheel', slowPlotScroll2, { passive: false });
+      plot2.addEventListener('wheel', slowPlotScroll2, { passive: false })
+      plot3.addEventListener('wheel', slowPlotScroll3, { passive: false })
     }
 
     return () => {
       plot1?.removeEventListener('wheel', slowPlotScroll1);
       plot2?.removeEventListener('wheel', slowPlotScroll2);
+      plot3?.removeEventListener('wheel', slowPlotScroll3);
     };
-  }, [isPlotInited, isBufferInited, slowPlotScroll1, slowPlotScroll2]);
+  }, [isPlotInited, isBufferInited, slowPlotScroll1, slowPlotScroll2, slowPlotScroll3]);
 
 
   return (
@@ -562,26 +581,27 @@ function App() {
                 {/* Vertical center line in plot box */}
                 <div className="absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%] z-10" />
 
-                <div
-                  className="plot-box-1 absolute top-0 left-0 w-full overflow-x-auto border"
-                  style={{ zIndex: plot1Z }}
-                  ref={plotbox1}
-                  onScroll={handlePlotBoxScroll}
-                >
+                {plotData &&
+                  <div
+                    className="plot-box-1 absolute top-0 left-0 w-full overflow-x-auto border"
+                    style={{ zIndex: plot1Z }}
+                    ref={plotbox1}
+                    onScroll={handlePlotBoxScroll}
+                  >
 
-                  <Plot
-                    data={plotData}
-                    layout={plotLayout}
-                    config={{ responsive: false }}
-                  />
-                </div>
+                    <Plot
+                      data={plotData}
+                      layout={plotLayout}
+                      config={{ responsive: false }}
+                    />
+                  </div>}
 
                 {plotData2 &&
                   <div
                     className="plot-box-2 absolute top-0 left-0  w-full  overflow-x-auto border"
                     style={{ zIndex: plot2Z }}
                     ref={plotbox2}
-                  onScroll={handlePlotBoxScroll}
+                    onScroll={handlePlotBoxScroll}
                   >
                     <Plot
                       data={plotData2}
@@ -596,7 +616,7 @@ function App() {
                     className="plot-box-3 absolute top-0 left-0  w-full  overflow-x-auto border"
                     style={{ zIndex: plot3Z }}
                     ref={plotbox3}
-                  onScroll={handlePlotBoxScroll}
+                    onScroll={handlePlotBoxScroll}
                   >
                     <Plot
                       data={plotData3}
@@ -635,8 +655,11 @@ const loadModelAndConfig = async (configFile, configs, inferenceSession, annoSes
 
 // init function: sequence
 // TODO: merge init sequence and plots together
-const initSequence = async (genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1, mStart, mEnd, mSeq, boxWindowWidth, plotBoxScrollWidth) => {
+const initSequence = async (genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1, mStart, mEnd, mSeq, boxWindowWidth, plotBoxScrollWidth, setIsPlotInited, setIsBufferInited) => {
   setIsSeqInited(false)
+  setIsPlotInited(false)
+  setIsBufferInited(false)
+
   const [start, end] = [centerCoordinate - boxSeqHalfLen, centerCoordinate + boxSeqHalfLen]
   const sequence = await fetchSequence(start, end, genome, chromosome, strand)
   setBox1Seq(sequence)
@@ -784,9 +807,17 @@ const getPlotData = (plotDataMatrix, start, end, strand, plotConfig) => {
   return plotTraces.filter(trace => trace !== null);
 };
 
-const initPlot = async (setIsPlotInited, configs, inferenceSession, annoSession, boxStartCoord, boxEndCoord, genome, chromosome, strand, setTooltips, setAnnoColors, setPlotData, setPlotLayout, boxSeqLen, plotbox1, yDataKeys, inferenceOffset, motifNames, motifHslColors, colorThreshold, plotBoxScrollWidth, plotBoxAvailableScroll, plotScrollLEdge, plotScrollREdge, swapLThreshold, swapRThreshold, plotWindowSeqLen, mPlotData) => {
+const initPlot = async (setIsPlotInited, configs, inferenceSession, annoSession, boxStartCoord, boxEndCoord, genome, chromosome, strand, setTooltips, setAnnoColors, setPlotData, setPlotLayout, boxSeqLen, plotbox1, yDataKeys, inferenceOffset, motifNames, motifHslColors, colorThreshold, plotBoxScrollWidth, plotBoxAvailableScroll, plotScrollLEdge, plotScrollREdge, swapLThreshold, swapRThreshold, plotWindowSeqLen, mPlotData, initZvalues, setPlot1Z, setPlot2Z, setPlot3Z, initBufferPlotBoxMap, bufferPlotBoxMap) => {
   setIsPlotInited(false)
 
+  // resetting plots, plot order and box plot map
+  setPlotData(null)
+  setPlot1Z(initZvalues[0])
+  setPlot2Z(initZvalues[1])
+  setPlot3Z(initZvalues[2])
+  bufferPlotBoxMap.current = initBufferPlotBoxMap
+
+  // run inferences
   const convOffset = configs.current.convOffset
   const seq = await fetchSequence(boxStartCoord.current - convOffset, boxEndCoord.current + convOffset, genome, chromosome, strand) // fetch sequence because need longer than seqbox
   const outputs = await runInference(seq, inferenceSession)
@@ -861,13 +892,18 @@ const initPlot = async (setIsPlotInited, configs, inferenceSession, annoSession,
 }
 
 
-const slowerScrollHandler = (elementRef, slowdownFactor) => (e) => {
-  if (!elementRef.current) return;
+const slowerScrollHandler = (elementRef, slowdownFactor, isTransitioning, updateSlowdownFactor, leftSlowTriggerPoint, rightSlowTriggerPoint) => (e) => {
+  e.preventDefault()
+  if (!elementRef.current) return // no scrolling
 
-  e.preventDefault();
-  const container = elementRef.current;
-  const delta = e.deltaX || e.deltaY; // Prioritize horizontal scroll
-  container.scrollLeft += delta * slowdownFactor;
+  const container = elementRef.current
+  const delta = e.deltaX || e.deltaY // Prioritize horizontal scroll
+
+  if (isTransitioning.current || container.scrollLeft < leftSlowTriggerPoint.current || container.scrollLeft > rightSlowTriggerPoint.current) {
+    container.scrollLeft += delta * updateSlowdownFactor // even slower when getting close to the swappping region
+  } else {
+    container.scrollLeft += delta * slowdownFactor
+  }
 };
 
 export default App;
