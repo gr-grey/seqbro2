@@ -12,6 +12,7 @@ import { range, encodeSequence, getViewCoords, fetchSequence, getSliceIndicesFro
 import { useSearchParams } from 'react-router-dom';
 import throttle from 'lodash/throttle'
 
+
 function App() {
 
   // NavBar hamburger button folds genome form
@@ -726,7 +727,9 @@ const loadConfigFile = async (configFile, configs, setIsConfigsLoaded, annoSessi
 
 
 const initInfWorker = (infWorker, workerPath, setIsOnnxSessionLoaded, configs, pendingInference) => {
-  infWorker.current = new Worker(new URL(workerPath, import.meta.url))
+  // infWorker.current = new Worker(new URL(workerPath, import.meta.url))
+  // infWorker.current = new Worker()
+  infWorker.current = new Worker('/inferenceWorker.js');
 
   infWorker.current.onmessage = (e) => {
     const { type, sequence, results, error, requestId } = e.data
