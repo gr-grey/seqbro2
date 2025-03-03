@@ -48,10 +48,7 @@ function App() {
   // shift 3k at a time, get 4k new sequence at a time
 
   // full sequence (pad according to the model offset)
-  // const fullSequence = useRef(null)
   const overlappingLen = 1500
-  // const fullSeqStart = useRef(null)
-  // const fullSeqEnd = useRef(null)
 
   // three chunks: s (start), m (middle) and e (end)
   // based on coordinate value from small to large, instead of left and right, to avoid minus strand confusion
@@ -80,9 +77,9 @@ function App() {
   const mAnno = useRef(null)
   const eEnno = useRef(null)
 
-  // debug UI
-  const [debug1, setDebug1] = useState(null)
-  const [debug2, setDebug2] = useState(null)
+  // // debug UI
+  // const [debug1, setDebug1] = useState(null)
+  // const [debug2, setDebug2] = useState(null)
 
   // Sequence box UI
   const seqbox1 = useRef(null)
@@ -159,8 +156,7 @@ function App() {
 
   ////////////////////// inference with worker
   const infWorker = useRef(null)
-  // const infResult = useRef([]) // store inference result
-  const pendingInference = useRef(new Map()); // Persistent across renders
+  const pendingInference = useRef(new Map())
 
   // URL update effect
   useEffect(() => {
@@ -182,14 +178,17 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (isConfigsLoad) {
+      initInfWorker(infWorker, '/inferenceWorker.js', setIsOnnxSessionLoaded, configs, pendingInference)
+    }
+  }, [isConfigsLoad])
+
+  // init sequence, inference, and set plot
+
+  useEffect(() => {
     initSequence(genome, chromosome, centerCoordinate, strand, boxSeqHalfLen, boxSeqLen, boxStartCoord, boxEndCoord, setBox1Seq, setIsSeqInited, seqbox1, mStart, mEnd, mSeq, boxWindowWidth, plotBoxScrollWidth, setIsPlotInited, setIsBufferInited)
   }, [genome, chromosome, centerCoordinate, strand])
 
-  useEffect(() => {
-    if (isConfigsLoad) {
-      initInfWorker(infWorker, './inferenceWorker.js', setIsOnnxSessionLoaded, configs, pendingInference)
-    }
-  }, [isConfigsLoad])
 
   // load plot once sequence and inference sessions are ready
   useEffect(() => {
@@ -239,17 +238,6 @@ function App() {
           console.warn('left buffer scroll position to close to edge at', rightBufferPercent)
         }
         const lStartPos = plotBoxAvailableScroll.current * leftBufferPercent
-
-        // if (strand === '+') {
-        //   // end box on the right
-        //   plotbox3.current.scrollLeft = rStartPos
-        //   plotbox2.current.scrollLeft = lStartPos
-
-        // } else {
-        //   // start box on the right
-        //   plotbox2.current.scrollLeft = rStartPos
-        //   plotbox3.current.scrollLeft = lStartPos
-        // }
 
         setIsBufferInited(true)
 
@@ -313,35 +301,6 @@ function App() {
     } else {
       console.error(`Invalid endboxnum: ${endboxnum}`)
     }
-
-  }
-
-  const scrollBuffers = (startboxnum, endboxnum, plotbox1, plotbox2, plotbox3, strand, leftSwappingTriggerPoint, rightSwappingTriggerPoint) => {
-    let startPos, endPos
-    if (strand === '+') {
-      // end buffer on the right
-      endPos = rightSwappingTriggerPoint.current
-      startPos = leftSwappingTriggerPoint.current
-    } else {
-      // start buffer on the right
-      startPos = rightSwappingTriggerPoint.current
-      endPos = leftSwappingTriggerPoint.current
-    }
-    // Create an array of refs and use the correct index safely
-    const plotBoxes = [plotbox1, plotbox2, plotbox3];
-
-    if (plotBoxes[startboxnum - 1]?.current) {
-      plotBoxes[startboxnum - 1].current.scrollLeft = startPos;
-    } else {
-      console.error(`Invalid startboxnum: ${startboxnum}`);
-    }
-
-    if (plotBoxes[endboxnum - 1]?.current) {
-      plotBoxes[endboxnum - 1].current.scrollLeft = endPos;
-    } else {
-      console.error(`Invalid endboxnum: ${endboxnum}`);
-    }
-
 
   }
 
@@ -727,9 +686,7 @@ const loadConfigFile = async (configFile, configs, setIsConfigsLoaded, annoSessi
 
 
 const initInfWorker = (infWorker, workerPath, setIsOnnxSessionLoaded, configs, pendingInference) => {
-  // infWorker.current = new Worker(new URL(workerPath, import.meta.url))
-  // infWorker.current = new Worker()
-  infWorker.current = new Worker('/inferenceWorker.js');
+  infWorker.current = new Worker(workerPath);
 
   infWorker.current.onmessage = (e) => {
     const { type, sequence, results, error, requestId } = e.data
