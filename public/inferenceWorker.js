@@ -1,85 +1,145 @@
-self.importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js');
+self.importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js')
 
 let inferenceSession = null
+let annoSession = null
 
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@dev/dist/'
 self.onmessage = async (event) => {
-  const {type, data, requestId} = event.data
+  const { type, data, requestId } = event.data
 
   try {
     if (type === "init") {
       // init onnx session
       inferenceSession = await ort.InferenceSession.create(data.modelPath)
-      console.log('onnx session from ', data.modelPath)
-      self.postMessage({type: "init_done"})
-    } else if (type === 'runInference'){
+      annoSession = await ort.InferenceSession.create(data.annoModelPath)
+      console.log('inf onnx session from ', data.modelPath)
+      console.log('anno session from ', data.annoModelPath)
+      self.postMessage({ type: "init_done" })
+    } else if (type === 'runInference') {
       if (!inferenceSession) {
         throw new Error("Onnx session not initialized")
       }
 
+      const conf = data.configs.current
+      const start = data.start
+      const end = data.end
+      const offset = conf.convOffset
+
       // fetch sequence
-      const seq = await fetchSequence(data.start, data.end, data.genome, data.chromosome, data.strand)
-      const seqEncoded = encodeSequence(seq)
-      const seqTensor = new ort.Tensor('float32', seqEncoded.flat(), [1, 4, seq.length])
+      const infSeq = await fetchSequence(start - offset, end + offset, data.genome, data.chromosome, data.strand)
+      const sequence = infSeq.slice(offset, -offset)
+
+      const seqEncoded = encodeSequence(infSeq)
+      const seqTensor = new ort.Tensor('float32', seqEncoded.flat(), [1, 4, infSeq.length])
 
       // run inference
-      const feeds = {[inferenceSession.inputNames[0]]: seqTensor}
+      const feeds = { [inferenceSession.inputNames[0]]: seqTensor }
       const results = await inferenceSession.run(feeds)
 
-      self.postMessage({type: "inference_done", sequence: seq, results, requestId})
+      // post inference anno processing
+      // yDataKeys, motifNames, motifHslColors
+      const annoScores = []
+
+      for (const key of conf.annoInputs) {
+        const tensor = results[key] // Access the tensor using the key
+        annoScores.push(Array.from(tensor.cpuData)) // Convert tensor data to an array
+      }
+
+      // Flatten and create input tensor
+      const flatAnnoScores = annoScores.flat()
+      const stackedTensor = new ort.Tensor('float32', flatAnnoScores, [conf.annoInputs.length, end - start])
+      const annoFeeds = { motif_scores: stackedTensor } // motif_scores is input label for max_index.onnx
+      const { max_values, max_indices, max_all } = await annoSession.run(annoFeeds)
+      const maxValues = max_values.cpuData
+      const maxIndices = max_indices.cpuData
+      const maxAll = max_all.cpuData[0]
+
+      const { tooltips, annocolors } = annoSetup(start, end, data.strand, maxIndices, maxValues, maxAll, conf.motifHslColors, conf.scaledThreshold, conf.motifNames)
+
+      self.postMessage({ type: "inference_done", sequence, results, tooltips, annocolors, requestId })
 
     }
   } catch (error) {
-    self.postMessage({type: "error", error: error.message})
+    self.postMessage({ type: "error", error: error.message })
   }
 }
 
 // seqstr exclude last char
 const fetchSequence = async (start, end, genome, chromosome, strand) => {
-  const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`;
+  const url = `https://tss.zhoulab.io/apiseq?seqstr=\[${genome}\]${chromosome}:${start}-${end}\ ${strand}`
   try {
-      const response = await fetch(url);
-      const data = await response.json();
-      const sequence = data[0]?.data || "";
-      return sequence;
+    const response = await fetch(url)
+    const data = await response.json()
+    const sequence = data[0]?.data || ""
+    return sequence
   } catch (error) {
-      console.error("Failed to fetch sequence: ", error);
-      return "";
+    console.error("Failed to fetch sequence: ", error)
+    return ""
   }
-};
+}
 
 // helper function to encode sequence
 const encodeSequence = (inputSequence) => {
   const seqEncoded = Array.from(inputSequence).map((char) => {
-      switch (char) {
-          case 'A': return [1, 0, 0, 0];
-          case 'C': return [0, 1, 0, 0];
-          case 'G': return [0, 0, 1, 0];
-          case 'T': return [0, 0, 0, 1];
-          default: return [0, 0, 0, 0];
-      }
-  });
+    switch (char) {
+      case 'A': return [1, 0, 0, 0]
+      case 'C': return [0, 1, 0, 0]
+      case 'G': return [0, 0, 1, 0]
+      case 'T': return [0, 0, 0, 1]
+      default: return [0, 0, 0, 0]
+    }
+  })
   // transpose seqlen by 4 to 4 by seq_len
-  return seqEncoded[0].map((_, colIndex) => seqEncoded.map(row => row[colIndex]));
-};
+  return seqEncoded[0].map((_, colIndex) => seqEncoded.map(row => row[colIndex]))
+}
 
-// const runInference = async (inputSequence, inferenceSession) => {
-//   try {
-//     if (!inferenceSession.current) {
-//       throw new Error('Model session is not initialized.');
-//     }
+// Sequence generator function (commonly referred to as "range", cf. Python, Clojure, etc.)
+const range = (start, stop, step = 1) =>
+  Array.from(
+    { length: Math.ceil((stop - start) / step) },
+    (_, i) => start + i * step,
+  );
 
-//     // Encode the sequence
-//     const seqEncoded = encodeSequence(inputSequence);
-//     const seqEncodedTensor = new ort.Tensor('float32', seqEncoded.flat(), [1, 4, inputSequence.length]);
+// Helper: Convert HSL to CSS String
+const hslToCss = (h, s, l) => `hsl(${h}, ${s}%, ${l}%)`;
 
-//     // Run inference
-//     const feeds = { [inferenceSession.current.inputNames[0]]: seqEncodedTensor };
-//     const results = await inferenceSession.current.run(feeds);
+// Updated getTooltips function
+const annoSetup = (start, end, strand, maxIndices, maxValues, maxAll, motifHslColors, scaledThreshold, motifNames) => {
+  // Reverse range if strand is '-'
+  const coordinates = strand === '-' ? range(end, start, -1) : range(start, end)
 
-//     return results;
-//   } catch (error) {
-//     console.error("Error running inference:", error);
-//     return null;
-//   }
-// };
+  // Initialize arrays
+  const tooltips = []
+  const annocolors = []
+  const scaledAnnoScores = []
+
+  // Loop through each base pair to calculate values
+  coordinates.forEach((coordinate, index) => {
+    const motifIndex = maxIndices[index]
+    const motifScore = maxValues[index]
+    const scaledScore = motifScore / maxAll // Scale the score by maxAll
+
+    // Add scaled score to the array
+    scaledAnnoScores.push(scaledScore)
+
+    // Generate tooltip
+    if (scaledScore < scaledThreshold) {
+      tooltips.push(`${coordinate}`) // Only coordinate if below threshold
+    } else {
+      const motifName = motifNames[Number(motifIndex)] // Get motif name
+      tooltips.push(`${coordinate} ${motifName}: ${motifScore.toFixed(3)} (${scaledScore.toFixed(3)})`)
+    }
+
+    // Generate annotation color
+    if (scaledScore < scaledThreshold) {
+      annocolors.push("#FFFFFF") // White if below threshold
+    } else {
+      const [h, s, l] = motifHslColors[motifIndex]// Get HSL values for the motif
+      const blendedLightness = 100 - (100 - l) * scaledScore // Adjust lightness for intensity
+      annocolors.push(hslToCss(h, s, blendedLightness))
+    }
+  })
+
+  // Return tooltips and annotation colors
+  return { tooltips, annocolors }
+}
