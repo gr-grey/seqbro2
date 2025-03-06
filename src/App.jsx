@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import './App.css';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
@@ -7,10 +7,11 @@ import NavBar from './NavBar';
 import GenomeForm from './GenomeForm';
 import DallianceViewer from './DallianceViewer';
 import Plot from 'react-plotly.js';
-// import useDebounce from './useDebounce';
 import { range, hexToHsl, hslToCss, } from './utils';
 import { useSearchParams } from 'react-router-dom';
 import throttle from 'lodash/throttle'
+
+import { FixedSizeList as List } from "react-window";
 
 
 function App() {
@@ -36,7 +37,7 @@ function App() {
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, centerCoordinate, setCenterCoordinate, strand, setStrand, gene, setGene }
 
   // sequence coords system
-  const boxSeqHalfLen = 1000
+  const boxSeqHalfLen = 1500
   const boxSeqLen = 2 * boxSeqHalfLen
   const boxStartCoord = useRef(null)
   const boxEndCoord = useRef(null)
@@ -60,9 +61,14 @@ function App() {
 
   // plot box
   const plotbox = useRef(null)
-  const [plotData, setPlotData] = useState(null)
-  const [plotLayout, setPlotLayout] = useState(null)
   const plotHeight = 515
+
+
+  const initPlotNum = 3
+  const [items, setItems] = useState([0]) // one item only
+  const initMiddleIdx = Math.floor(initPlotNum / 2)
+  const plotDataList = useRef(null)
+  const plotLayoutList = useRef(null)
 
   // tracking sizes
   const boxWindowWidth = useRef(null) // width for both sequence and plot box
@@ -77,19 +83,14 @@ function App() {
   // characters
   const plotWindowSeqLen = useRef(null)
 
-  const swapLThreshold = 0.05
-  const swapRThreshold = 0.95
-  // for plot only, cause 
-  const plotScrollLEdge = useRef(null)
-  const plotScrollREdge = useRef(null)
-
   // scroll buffers to this position to be ready for swapping, need to change with windowsize
-  const leftSwappingTriggerPoint = useRef(null)
-  const rightSwappingTriggerPoint = useRef(null)
+  const leftUpdateTriggerPoint = useRef(null)
+  const rightUpdateTriggerPoint = useRef(initPlotNum)
 
-  // wether changing visibility
+  // track scrolling
+  const isInitedScrolled = useRef(false)
   const isTransitioning = useRef(false)
-  const isUpdatingBuffers = useRef(false)
+  const isUpdatingLists = useRef(false)
 
   ////////////////////// inference with worker
   const infWorker = useRef(null)
@@ -122,33 +123,135 @@ function App() {
     const boxWidth = seqbox.current.clientWidth
     boxWindowWidth.current = boxWidth
     const plotPxPerBP = Math.max(Math.ceil(boxWidth / 500), 3) * 0.5
-    plotBoxScrollWidth.current = plotPxPerBP * boxSeqLen
-    plotBoxAvailableScroll.current = plotPxPerBP * boxSeqLen - boxWidth
+    const plotScrollWidth = plotPxPerBP * boxSeqLen
+    plotBoxScrollWidth.current = plotScrollWidth
+    plotBoxAvailableScroll.current = plotScrollWidth - boxWidth
     seqBoxAvailableScroll.current = seqBoxScrollWidth.current - boxWidth
+
+    // right trigger point
+    rightUpdateTriggerPoint.current = (initPlotNum - 2) * plotScrollWidth + plotBoxAvailableScroll.current // when reach the last part of the second but last plot
   }, [isConfigsLoad])
 
 
   // init sequence, inference, and set plot
   const initSeqPlot = async () => {
-    setPlotData(null)
-    const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(centerCoordinate, boxSeqHalfLen, genome, chromosome, strand, isOnnxSessionLoaded, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth)
+    setIsFirstChunkInited(false)
+    plotDataList.current = new Array(initPlotNum).fill(null)
+    plotLayoutList.current = new Array(initPlotNum).fill(null)
+
+    const start = centerCoordinate - boxSeqHalfLen
+    const end = centerCoordinate + boxSeqHalfLen
+    boxStartCoord.current = start
+    boxEndCoord.current = end
+    const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(start, end, genome, chromosome, strand, isOnnxSessionLoaded, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth)
 
     setBoxSeq(sequence)
     setTooltips(tooltips)
     setAnnoColors(annocolors)
-    setPlotData(plotData)
-    setPlotLayout(plotLayout)
-    
+    plotDataList.current[initMiddleIdx] = plotData
+    plotLayoutList.current[initMiddleIdx] = plotLayout
+    setItems(range(0, initPlotNum))
+    setIsFirstChunkInited(true)
+
     // scroll things to middle
     setTimeout(() => {
-      seqbox.current.scrollLeft = seqBoxAvailableScroll.current / 2
-      plotbox.current.scrollLeft = plotBoxAvailableScroll.current / 2
+      plotbox.current.scrollToItem(initMiddleIdx, 'center')
+      isInitedScrolled.current = true
     }, 10)
   }
 
   useEffect(() => {
     if (isOnnxSessionLoaded) { initSeqPlot() }
   }, [genome, chromosome, centerCoordinate, strand, isOnnxSessionLoaded])
+
+
+  // expand towards the start coords by a chunk
+  const extendFixedLists = async (direction, strand) => {
+    isUpdatingLists.current = true
+    let newStart, newEnd
+    if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
+      // need data for smaller coords
+      newEnd = boxStartCoord.current
+      newStart = newEnd - boxSeqLen
+      boxStartCoord.current = newStart // update start
+    } else {
+      newStart = boxEndCoord.current
+      newEnd = newStart + boxSeqLen
+      boxEndCoord.current = newEnd // update end
+    }
+    
+    const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(newStart, newEnd, genome, chromosome, strand, isOnnxSessionLoaded, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth)
+    
+    // prepend or append according to directions
+    if (direction === 'left') {
+      plotDataList.current[0] = plotData
+      plotLayoutList.current[0] = plotLayout
+    } else {
+      const lastIdx = plotDataList.current.length - 1
+      plotDataList.current[lastIdx] = plotData
+      plotLayoutList.current[lastIdx] = plotLayout
+    }
+
+    requestAnimationFrame(() => {
+      isUpdatingLists.current = false
+    })
+
+  }
+
+  const initSideChunks = async () => {
+    await extendFixedLists('left', strand)
+    await extendFixedLists('right', strand)
+  }
+  // load the other two chunks once the middle chunk is loaded
+  useEffect(() => {
+    if (isFirstChunkInited) { initSideChunks() }
+  }, [isFirstChunkInited])
+
+  const handlePlotBoxScroll = throttle(({ scrollOffset }) => {
+    if (isTransitioning.current || !isInitedScrolled.current) return;
+
+    if (scrollOffset < plotBoxScrollWidth.current && !isUpdatingLists.current) {
+      // left edge, avoid upating lists at the sametime
+      isTransitioning.current = true
+      // add a null chunk and update items
+      plotDataList.current = [null, ...plotDataList.current]
+      plotLayoutList.current = [null, ...plotLayoutList.current]
+      setItems((prev) => [prev[0] - 1, ...prev])
+      plotbox.current.scrollTo(scrollOffset + plotBoxScrollWidth.current)
+      extendFixedLists('left', strand)
+
+      requestAnimationFrame(() => {
+        isTransitioning.current = false
+      })
+    } else if (scrollOffset > rightUpdateTriggerPoint.current) {
+      //  right edge
+      isTransitioning.current = true
+      // add a null chunk at the end and update items
+      plotDataList.current = [...plotDataList.current, null]
+      plotLayoutList.current = [...plotLayoutList.current, null]
+      setItems((prev) => [...prev, prev[items.length - 1] + 1])
+      extendFixedLists('right', strand)
+      rightUpdateTriggerPoint.current += plotBoxScrollWidth.current // move the trigger point further down
+
+      requestAnimationFrame(() => {
+        isTransitioning.current = false
+      })
+    }
+  }, 100)
+
+  const PlotRow = ({ index, style }) => {
+    const num = items[index];
+    if (plotDataList.current[index]) {
+      // Memoize the plot so it doesn't rerender unnecessarily
+      return useMemo(() =>
+        <div style={{ ...style }} >
+          <Plot data={plotDataList.current[index]} layout={plotLayoutList.current[index]} />
+        </div>
+        , [num]);
+    } else {
+      return (<div style={{ ...style, width: plotBoxScrollWidth.current }} >Loading....{num}</div>)
+    }
+  }
 
   return (
     <>
@@ -170,7 +273,7 @@ function App() {
               ref={seqbox}
             >
               {/* Vertical center line in sequence box */}
-              <div className="absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%]" />
+              <div className={`absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%]`} />
               {/* {boxSeq} */}
               {boxSeq ?
                 boxSeq.split("").map((char, index) => (
@@ -190,7 +293,7 @@ function App() {
 
           {/* Plot box */}
 
-          {plotData ?
+          {isFirstChunkInited ?
             <div className='mt-2'>
               {/* Plot title */}
               {<div className="w-full h-4 mb-4 text-xl flex items-center justify-center">{configs.current.title}</div>}
@@ -211,22 +314,23 @@ function App() {
                   </div>
                 ))}
                 {/* Vertical center line in plot box */}
-                <div className="absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%] z-10" />
+                <div className={`absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[49.95%] z-10`} />
 
-                {plotData &&
-                  <div
-                    className="plot-box-1 absolute top-0 left-0 w-full overflow-x-auto border"
-                    // style={{ zIndex: plot1Z }}
-                    ref={plotbox}
-                  // onScroll={handlePlotBoxScroll}
-                  >
-
-                    <Plot
-                      data={plotData}
-                      layout={plotLayout}
-                      config={{ responsive: false }}
-                    />
-                  </div>}
+                {isFirstChunkInited &&
+                  <div className="plot-box top-0 left-0 w-full overflow-x-auto border">
+                    <List
+                      layout="horizontal"
+                      ref={plotbox}
+                      height={plotHeight}
+                      itemCount={items.length}
+                      itemSize={plotBoxScrollWidth.current}
+                      width={boxWindowWidth.current}
+                      onScroll={handlePlotBoxScroll}
+                    >
+                      {PlotRow}
+                    </List>
+                  </div>
+                }
 
               </div>
             </div>
@@ -344,9 +448,7 @@ const getPlotData = (plotDataMatrix, start, end, strand, plotConfig) => {
 };
 
 // get all data corresponding to a chunk of sequence
-const getSeqPlotAnno = async (centerCoordinate, boxSeqHalfLen, genome, chromosome, strand, isOnnxSessionLoaded, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth) => {
-  const start = centerCoordinate - boxSeqHalfLen
-  const end = centerCoordinate + boxSeqHalfLen
+const getSeqPlotAnno = async (start, end, genome, chromosome, strand, isOnnxSessionLoaded, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth) => {
 
   // worker fetch sequence and run inference, note that inf result is shorter than sequence input
   const { sequence, results, tooltips, annocolors } = await workerInference(start, end, genome, chromosome, strand, isOnnxSessionLoaded, infWorker, pendingInference, configs)
