@@ -32,9 +32,16 @@ function App() {
   const boxStartCoord = useRef(null)
   const boxEndCoord = useRef(null)
 
+  const container = useRef(null) // common container for both seq and plot
   // sequence box
   const seqbox = useRef(null)
   const [seq, setSeq] = useState(null)
+
+  const [seqItems, setSeqItems] = useState([0])
+  const seqList = useRef(null)
+  const tooltipsList = useRef(null)
+  const annoList = useRef(null)
+
   // default tooltips: coords
   const [tooltips, setTooltips] = useState(strand === '+' ? range(centerCoordinate - boxSeqHalfLen, centerCoordinate + boxSeqHalfLen) : range(centerCoordinate + boxSeqHalfLen, centerCoordinate - boxSeqHalfLen, -1))
   // default color: white
@@ -47,6 +54,7 @@ function App() {
   const [isConfigsLoad, setIsConfigsLoaded] = useState(false)
   const [isWorkerInited, setIsWorkerInited] = useState(false)
   const [isFirstChunkInited, setIsFirstChunkInited] = useState(false)
+
 
   // plot box
   const plotbox = useRef(null)
@@ -106,7 +114,7 @@ function App() {
       initWorker(infWorker, pendingInference, setIsWorkerInited, configs)
 
       // set widths
-      const boxWidth = seqbox.current.clientWidth
+      const boxWidth = container.current.clientWidth
       boxWindowWidth.current = boxWidth
       const plotPxPerBP = Math.max(Math.ceil(boxWidth / 500), 3) * 0.5
       const plotScrollWidth = plotPxPerBP * boxSeqLen
@@ -122,6 +130,10 @@ function App() {
   // init sequence, inference, and set plot
   const initPlot = async () => {
     setIsFirstChunkInited(false)
+    seqList.current = new Array(initPlotNum).fill(null)
+    tooltipsList.current = new Array(initPlotNum).fill(null)
+    annoList.current = new Array(initPlotNum).fill(null)
+
     plotDataList.current = new Array(initPlotNum).fill(null)
     plotLayoutList.current = new Array(initPlotNum).fill(null)
     isInitedScrolled.current = false
@@ -132,30 +144,31 @@ function App() {
     boxEndCoord.current = end
     const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin)
 
-    setSeq(sequence)
-    setTooltips(tooltips)
-    setAnnoColors(annocolors)
+    // setSeq(sequence)
+    // setTooltips(tooltips)
+    // setAnnoColors(annocolors)
+
+    seqList.current[initMiddleIdx] = sequence
+    tooltipsList.current[initMiddleIdx] = tooltips
+    annoList.current[initMiddleIdx] = annocolors
+
     plotDataList.current[initMiddleIdx] = plotData
     plotLayoutList.current[initMiddleIdx] = plotLayout
     setItems(range(0, initPlotNum))
     setIsFirstChunkInited(true)
-    
+
     // scroll things to middle
     setTimeout(() => {
-      seqbox.current.scrollLeft = seqBoxAvailableScroll.current * 0.5
+      // seqbox.current.scrollLeft = seqBoxAvailableScroll.current * 0.5
       plotbox.current.scrollToItem(initMiddleIdx, 'center')
+      seqbox.current.scrollToItem(initMiddleIdx, 'center')
       isInitedScrolled.current = true
     }, 10)
   }
   // get sequence
   useEffect(() => {
-    if (isWorkerInited) {
-      initPlot()
-
-    }
-
+    if (isWorkerInited) { initPlot() }
   }, [isWorkerInited, genome, chromosome, centerCoordinate, strand])
-
 
   const initSideChunks = async () => {
     await extendFixedLists('left', strand)
@@ -168,6 +181,8 @@ function App() {
 
   const handlePlotBoxScroll = throttle(({ scrollOffset }) => {
     if (isTransitioning.current || !isInitedScrolled.current) return;
+
+    // console.log('scrollLeft', scrollOffset)
 
     if (scrollOffset < plotBoxScrollWidth.current && !isUpdatingLists.current) {
       // left edge, avoid upating lists at the sametime
@@ -197,6 +212,42 @@ function App() {
       })
     }
   }, 100)
+
+  const SeqRow = ({ index, style }) => {
+    const num = items[index]; // use the same items list for seq and plot
+    const seq = seqList.current[index];
+
+    if (seq) {
+      const tooltips = tooltipsList.current[index];
+      const annoColors = annoList.current[index];
+
+      const memoizedSeq = useMemo(() => (
+        <div style={style}>
+          {seq.split("").map((char, i) => (
+            <Tippy content={tooltips[i]} key={i}>
+              <span
+                style={{
+                  backgroundColor: annoColors[i],
+                  display: "inline-block",
+                  width: seqboxCharWidth,
+                }}
+              >
+                {char}
+              </span>
+            </Tippy>
+          ))}
+        </div>
+      ), [num]);
+
+      return memoizedSeq;
+    } else {
+      return (
+        <div style={{ ...style, width: seqBoxScrollWidth.current }}>
+          Loading....{num}
+        </div>
+      );
+    }
+  };
 
   const PlotRow = ({ index, style }) => {
     const num = items[index];
@@ -239,10 +290,16 @@ function App() {
 
     // prepend or append according to directions
     if (direction === 'left') {
+      seqList.current[0] = sequence
+      tooltipsList.current[0] = tooltips
+      annoList.current[0] = annocolors
       plotDataList.current[0] = plotData
       plotLayoutList.current[0] = plotLayout
     } else {
       const lastIdx = plotDataList.current.length - 1
+      seqList.current[lastIdx] = sequence
+      tooltipsList.current[lastIdx] = tooltips
+      annoList.current[lastIdx] = annocolors
       plotDataList.current[lastIdx] = plotData
       plotLayoutList.current[lastIdx] = plotLayout
     }
@@ -259,30 +316,28 @@ function App() {
       <h1 className="my-4 text-3xl font-extrabold text-gray-900 dark:text-white md:text-5xl lg:text-6xl"><span className="text-transparent bg-clip-text bg-gradient-to-r to-emerald-600 from-sky-400">Sequence browser</span> demo</h1>
 
       <GenomeForm {...genomeFormVars} />
-      <div className='flex-grow py-2 overflow-x-hidden'>
+      <div className='flex-grow py-2 overflow-x-hidden' ref={container}>
         {/* Sequence box */}
-        <div className='relative'>
-          <div
-            className="sequence-box bg-white border-[2px] border-dashed border-green-500 overflow-x-auto font-mono whitespace-nowrap"
-            ref={seqbox}
-          >
-            {/* Vertical center line in sequence box */}
-            <div className={`absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%]`} />
-            {seq ?
-              seq.split("").map((char, index) => (
-                <Tippy content={tooltips[index]} key={index}>
-                  <span style={{
-                    backgroundColor: annoColors[index],
-                    display: 'inline-block',
-                    width: seqboxCharWidth,
-                  }}>
-                    {char}
-                  </span>
-                </Tippy>
-              ))
-              : "Loading...."}
+
+        {/* Vertical center line in sequence box */}
+
+        {isFirstChunkInited &&
+          <div className='relative h-[40px]'>
+            <div className={`absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%] z-10`} />
+            <List
+              className="sequence-box bg-white border-[2px] border-dashed border-green-500 overflow-x-auto font-mono whitespace-nowrap"
+              layout="horizontal"
+              ref={seqbox}
+              height={40}
+              itemCount={items.length}
+              itemSize={seqBoxScrollWidth.current}
+              width={boxWindowWidth.current}
+            // onScroll={handlePlotBoxScroll}
+            >
+              {SeqRow}
+            </List>
           </div>
-        </div>
+        }
 
         {/* Plot box */}
 
@@ -409,7 +464,6 @@ const hexToHsl = (hex) => {
 
 // Helper: Convert HSL to CSS String
 const hslToCss = (h, s, l) => `hsl(${h}, ${s}%, ${l}%)`;
-
 
 const workerInference = (start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs) => {
 
