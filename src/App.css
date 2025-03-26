@@ -1,0 +1,7 @@
+.sequence-box::-webkit-scrollbar {
+  display: none;
+}
+
+.plot-box::-webkit-scrollbar {
+  display: none;
+}
