@@ -1,0 +1,906 @@
+modelPath: /motif.onnx
+# anno model gets column max, index and all max
+annoModelPath: /max_index.onnx
+convOffset: 14
+title: Motif acivation
+threshold: 8.0
+scaledThreshold: 0.05
+# anno scores that's used as input to anno model
+annoInputs:
+  - motif1sc
+  - motif2sc
+  - motif3sc
+  - motif4sc
+  - motif5sc
+  - motif6sc
+  - motif7sc
+  - motif8sc
+  - motif9sc
+  - motif10sc
+  - motif11sc
+  - motif12sc
+  - motif13sc
+  - motif14sc
+  - motif15sc
+  - motif16sc
+  - motif17sc
+  - motif18sc
+  - motif19sc
+  - motif20sc
+  - motif21sc
+  - motif22sc
+  - motif23sc
+  - motif24sc
+  - motif25sc
+  - motif26sc
+  - motif27sc
+  - motif28sc
+  - motif29sc
+  - motif30sc
+  - motif31sc
+  - motif32sc
+  - motif33sc
+  - motif34sc
+  - motif35sc
+  - motif36sc
+  - motif37sc
+  - motif38sc
+  - motif39sc
+  - motif40sc
+  - motif41sc
+  - motif42sc
+  - motif43sc
+  - motif44sc
+  - motif45sc
+  - motif46sc
+  - motif47sc
+  - motif48sc
+  - motif49sc
+  - motif50sc
+  - motif51sc
+  - motif52sc
+  - motif53sc
+  - motif54sc
+  - motif55sc
+  - motif56sc
+  - motif57sc
+  - motif58sc
+  - motif59sc
+  - motif60sc
+  - motif61sc
+  - motif62sc
+  - motif63sc
+  - motif64sc
+  - motif65sc
+  - motif66sc
+  - motif67sc
+  - motif68sc
+  - motif69sc
+  - motif70sc
+  - motif71sc
+  - motif72sc
+  - motif73sc
+  - motif74sc
+  - motif75sc
+  - motif76sc
+  - motif77sc
+  - motif78sc
+  - motif79sc
+  - motif80sc
+  - motif81sc
+  - motif82sc
+  - motif83sc
+  - motif84sc
+  - motif85sc
+  - motif86sc
+  - motif87sc
+  - motif88sc
+  - motif89sc
+  - motif90sc
+  - motif91sc
+  - motif92sc
+  - motif93sc
+  - motif94sc
+  - motif95sc
+  - motif96sc
+  - motif97sc
+  - motif98sc
+  - motif99sc
+  - motif100sc
+  - motif101sc
+  - motif102sc
+  - motif103sc
+  - motif104sc
+  - motif105sc
+  - motif106sc
+  - motif107sc
+  - motif108sc
+  - motif109sc
+  - motif110sc
+  - motif111sc
+  - motif112sc
+  - motif113sc
+  - motif114sc
+  - motif115sc
+  - motif116sc
+  - motif117sc
+  - motif118sc
+  - motif119sc
+  - motif120sc
+  - motif121sc
+  - motif122sc
+  - motif123sc
+  - motif124sc
+  - motif125sc
+  - motif126sc
+  - motif127sc
+  - motif128sc
+  - motif129sc
+  - motif130sc
+  - motif131sc
+  - motif132sc
+  - motif133sc
+  - motif134sc
+  - motif135sc
+  - motif136sc
+  - motif137sc
+  - motif138sc
+  - motif139sc
+  - motif140sc
+  - motif141sc
+  - motif142sc
+  - motif143sc
+  - motif144sc
+  - motif145sc
+  - motif146sc
+  - motif147sc
+  - motif148sc
+  - motif149sc
+  - motif150sc
+  - motif151sc
+  - motif152sc
+  - motif153sc
+  - motif154sc
+  - motif155sc
+  - motif156sc
+  - motif157sc
+  - motif158sc
+  - motif159sc
+  - motif160sc
+  - motif161sc
+  - motif162sc
+  - motif163sc
+  - motif164sc
+  - motif165sc
+  - motif166sc
+  - motif167sc
+  - motif168sc
+  - motif169sc
+  - motif170sc
+  - motif171sc
+  - motif172sc
+  - motif173sc
+  - motif174sc
+  - motif175sc
+  - motif176sc
+  - motif177sc
+  - motif178sc
+  - motif179sc
+  - motif180sc
+  - motif181sc
+  - motif182sc
+  - motif183sc
+  - motif184sc
+  - motif185sc
+  - motif186sc
+  - motif187sc
+  - motif188sc
+  - motif189sc
+  - motif190sc
+  - motif191sc
+  - motif192sc
+  - motif193sc
+  - motif194sc
+  - motif195sc
+  - motif196sc
+  - motif197sc
+  - motif198sc
+  - motif199sc
+  - motif200sc
+  - motif201sc
+  - motif202sc
+  - motif203sc
+  - motif204sc
+  - motif205sc
+  - motif206sc
+  - motif207sc
+  - motif208sc
+  - motif209sc
+  - motif210sc
+  - motif211sc
+  - motif212sc
+  - motif213sc
+  - motif214sc
+  - motif215sc
+  - motif216sc
+  - motif217sc
+  - motif218sc
+  - motif219sc
+  - motif220sc
+  - motif221sc
+  - motif222sc
+  - motif223sc
+  - motif224sc
+  - motif225sc
+  - motif226sc
+  - motif227sc
+  - motif228sc
+  - motif229sc
+  - motif230sc
+  - motif231sc
+  - motif232sc
+  - motif233sc
+  - motif234sc
+  - motif235sc
+  - motif236sc
+  - motif237sc
+  - motif238sc
+  - motif239sc
+  - motif240sc
+  - motif241sc
+  - motif242sc
+  - motif243sc
+motifNameColorDict:
+  - "AC0001:DLX/LHX:Homeodomain": "rgb(255,0,53)"
+  - "AC0024:POU3F/HESX:Homeodomain": "rgb(255,0,47)"
+  - "AC0002:EMX/PAX:Homeodomain": "rgb(255,0,41)"
+  - "AC0010:PROP/ALX:Homeodomain": "rgb(255,0,35)"
+  - "AC0009:DUXA/DUX:Homeodomain": "rgb(255,0,23)"
+  - "AC0651:ZNF:C2H2_ZF": "rgb(255,0,23)"
+  - "AC0652:TEAD:TEA": "rgb(255,0,23)"
+  - "AC0130:HNF4A/HNF4G:['Nuclear_receptors_with_C4_zinc_fingers']": "rgb(255,0,23)"
+  - "AC0131:HNF4A/HNF4G:Nuclear_receptor": "rgb(255,0,23)"
+  - "AC0132:NR2F/RXRG:Nuclear_receptor": "rgb(255,0,23)"
+  - "AC0133:NR6A:Nuclear_receptor": "rgb(255,0,23)"
+  - "AC0121:ESRRA/NR5A:Nuclear_receptor": "rgb(255,0,23)"
+  - "AC0114:NR4A/NR2C:Nuclear_receptor": "rgb(255,0,23)"
+  - "AC0112:NR2F/RXRA:Nuclear_receptor": "rgb(255,0,0)"
+  - "AC0124:RARA/RARG:Nuclear_receptor": "rgb(255,5,0)"
+  - "AC0123:NR1D/RORC:Nuclear_receptor": "rgb(255,11,0)"
+  - "AC0122:ESR/ESRRA:Nuclear_receptor": "rgb(255,17,0)"
+  - "AC0113:RARA/ESRRA:Nuclear_receptor": "rgb(255,23,0)"
+  - "AC0116:THRB/ESRRA:Nuclear_receptor": "rgb(255,29,0)"
+  - "AC0115:NR1I/NR1H:Nuclear_receptor": "rgb(255,35,0)"
+  - "AC0125:NR1I/VDR:Nuclear_receptor": "rgb(255,41,0)"
+  - "AC0126:NR1I/VDR:Nuclear_receptor": "rgb(255,47,0)"
+  - "AC0127:TCF7L/LEF:Sox": "rgb(255,53,0)"
+  - "AC0196:ZNF:C2H2_ZF": "rgb(255,59,0)"
+  - "AC0120:THRB:Nuclear_receptor": "rgb(255,64,0)"
+  - "AC0108:RXRG/RARB:Nuclear_receptor": "rgb(255,76,0)"
+  - "AC0110:NR2F/NR1H:Nuclear_receptor": "rgb(255,82,0)"
+  - "AC0142:ZNF:C2H2_ZF": "rgb(255,88,0)"
+  - "AC0584:ZSCAN:C2H2_ZF": "rgb(255,94,0)"
+  - "AC0588:ZNF:C2H2_ZF": "rgb(255,100,0)"
+  - "AC0477:HIC:C2H2_ZF": "rgb(255,106,0)"
+  - "AC0479:NFIA/NFIC:SMAD": "rgb(255,112,0)"
+  - "AC0480:NFIX/NFIC:SMAD": "rgb(255,118,0)"
+  - "AC0511:YY/ZFP:C2H2_ZF": "rgb(255,124,0)"
+  - "AC0482:E2F:E2F": "rgb(255,129,0)"
+  - "AC0548:E2F:E2F": "rgb(255,135,0)"
+  - "AC0547:E2F/ZNF:E2F": "rgb(255,147,0)"
+  - "AC0545:E2F/TFDP:E2F": "rgb(255,153,0)"
+  - "AC0615:ZNF:C2H2_ZF": "rgb(255,159,0)"
+  - "AC0641:ETV/ETS:Ets": "rgb(255,165,0)"
+  - "AC0642:SPIB/SPI:Ets": "rgb(255,171,0)"
+  - "AC0640:ELF/ETV:Ets": "rgb(255,177,0)"
+  - "AC0639:FOXO1::ELK/ERF::FOXO:['Tryptophan_cluster_factors',_'Fork_head/winged_helix_factors']": "rgb(255,183,0)"
+  - "AC0643:ETS/ETV:Ets": "rgb(255,189,0)"
+  - "AC0509:ZNF:C2H2_ZF": "rgb(255,194,0)"
+  - "AC0271:PROX:Prospero": "rgb(255,200,0)"
+  - "AC0199:ZNF:C2H2_ZF": "rgb(255,206,0)"
+  - "AC0200:ZNF:C2H2_ZF": "rgb(255,218,0)"
+  - "AC0531:ZNF:C2H2_ZF": "rgb(255,224,0)"
+  - "AC0486:SREBF:bHLH": "rgb(255,230,0)"
+  - "AC0610:FOXO:Forkhead": "rgb(255,236,0)"
+  - "AC0611:ZNF:C2H2_ZF": "rgb(253,241,0)"
+  - "AC0502:ZNF:C2H2_ZF": "rgb(251,245,0)"
+  - "AC0609:ZNF/MZF:C2H2_ZF": "rgb(250,249,0)"
+  - "AC0693:IKZF/NFKB:Rel": "rgb(248,252,0)"
+  - "AC0674:PRDM:C2H2_ZF": "rgb(244,255,0)"
+  - "AC0677:BCL11A/IRF:C2H2_ZF": "rgb(238,255,0)"
+  - "AC0222:ZNF/ZFP:C2H2_ZF": "rgb(232,255,0)"
+  - "AC0221:ZNF/PRDM:C2H2_ZF": "rgb(220,255,0)"
+  - "AC0215:ZNF:C2H2_ZF": "rgb(214,255,0)"
+  - "AC0154:ZNF354A/ZNF:C2H2_ZF": "rgb(208,255,0)"
+  - "AC0095:WT/FOXC:C2H2_ZF": "rgb(202,255,0)"
+  - "AC0057:TBP/ZNF:TBP": "rgb(196,255,0)"
+  - "AC0295:MEF2A/MEF2C:MADS_box": "rgb(191,255,0)"
+  - "AC0297:MEF2B/MEF2C:MADS_box": "rgb(185,255,0)"
+  - "AC0296:SRF:MADS_box": "rgb(179,255,0)"
+  - "AC0680:NFATC:Rel": "rgb(173,255,0)"
+  - "AC0682:NFATC/ZNF:Rel": "rgb(167,255,0)"
+  - "AC0683:NFATC:Rel": "rgb(161,255,0)"
+  - "AC0289:RFX/MXI:RFX": "rgb(149,255,0)"
+  - "AC0290:RFX:RFX": "rgb(143,255,0)"
+  - "AC0291:RFX:RFX": "rgb(137,255,0)"
+  - "AC0292:RFX:RFX": "rgb(131,255,0)"
+  - "AC0287:PRDM:C2H2_ZF": "rgb(126,255,0)"
+  - "AC0665:BCL/BCL6B:C2H2_ZF": "rgb(120,255,0)"
+  - "AC0668:STAT/ETV:STAT": "rgb(114,255,0)"
+  - "AC0646:ERG/FLI:Ets": "rgb(108,255,0)"
+  - "AC0691:RELA/NFKB:Rel": "rgb(102,255,0)"
+  - "AC0542:ZNF75A/ZNF75D:C2H2_ZF": "rgb(96,255,0)"
+  - "AC0487:TBX/T:T-box": "rgb(90,255,0)"
+  - "AC0489:TBX/EOMES:T-box": "rgb(78,255,0)"
+  - "AC0490:TBX/EOMES:T-box": "rgb(72,255,0)"
+  - "AC0488:TBX:T-box": "rgb(67,255,0)"
+  - "AC0019:TLX/PAX:Homeodomain": "rgb(61,255,0)"
+  - "AC0032:LHX:Homeodomain": "rgb(55,255,0)"
+  - "AC0659:SOX/SRY:Sox": "rgb(49,255,0)"
+  - "AC0293:SOX/SRY:Sox": "rgb(43,255,0)"
+  - "AC0294:SOX/SRY:Sox": "rgb(37,255,0)"
+  - "AC0252:SOX:Sox": "rgb(31,255,0)"
+  - "AC0253:SOX/SRY:Sox": "rgb(25,255,0)"
+  - "AC0255:SOX/SRY:Sox": "rgb(19,255,0)"
+  - "AC0254:SOX:Sox": "rgb(7,255,0)"
+  - "AC0660:HSFY:HSF": "rgb(5,255,3)"
+  - "AC0313:ZBED:BED_ZF": "rgb(4,255,7)"
+  - "AC0323:SMAD:SMAD": "rgb(2,255,11)"
+  - "AC0686:HSF/NFATC:HSF": "rgb(0,255,15)"
+  - "AC0466:ZNF/SP:C2H2_ZF": "rgb(0,255,21)"
+  - "AC0462:ZBTB/ZNF:C2H2_ZF": "rgb(0,255,27)"
+  - "AC0210:ZNF:C2H2_ZF": "rgb(0,255,33)"
+  - "AC0205:ZNF:C2H2_ZF": "rgb(0,255,39)"
+  - "AC0204:ZNF:C2H2_ZF": "rgb(0,255,45)"
+  - "AC0298:ZSCAN:C2H2_ZF": "rgb(0,255,51)"
+  - "AC0245:GATA:GATA": "rgb(0,255,57)"
+  - "AC0246:GATA/TAL:GATA": "rgb(0,255,68)"
+  - "AC0242:MECOM:C2H2_ZF": "rgb(0,255,74)"
+  - "AC0278:OVOL:C2H2_ZF": "rgb(0,255,80)"
+  - "AC0280:MYBL:Myb/SANT": "rgb(0,255,86)"
+  - "AC0139:BCL11A/BCL11B:C2H2_ZF": "rgb(0,255,92)"
+  - "AC0330:ZNF:C2H2_ZF": "rgb(0,255,98)"
+  - "AC0472:HMBOX:Homeodomain": "rgb(0,255,104)"
+  - "AC0319:ZFP:C2H2_ZF": "rgb(0,255,110)"
+  - "AC0541:ETS/SIX:Ets": "rgb(0,255,116)"
+  - "AC0543:RBPJ:CSL": "rgb(0,255,121)"
+  - "AC0539:ZNF:C2H2_ZF": "rgb(0,255,127)"
+  - "AC0663:ZNF:C2H2_ZF": "rgb(0,255,139)"
+  - "AC0076:ERF::FIGLA/ETV2::FIGLA:['Tryptophan_cluster_factors',_'Basic_helix-loop-helix_factors_(bHLH)']": "rgb(0,255,145)"
+  - "AC0081:SCRT:C2H2_ZF": "rgb(0,255,151)"
+  - "AC0474:GRHL/TFCP:Grainyhead": "rgb(0,255,157)"
+  - "AC0473:TFCP/TFCP2L:Grainyhead": "rgb(0,255,163)"
+  - "AC0475:TP:p53": "rgb(0,255,169)"
+  - "AC0515:PAX:Homeodomain,Paired_box": "rgb(0,255,175)"
+  - "AC0484:PAX:Homeodomain,Paired_box": "rgb(0,255,181)"
+  - "AC0483:PAX:Homeodomain,Paired_box": "rgb(0,255,186)"
+  - "AC0492:TBX/T:T-box": "rgb(0,255,192)"
+  - "AC0468:ZNF:C2H2_ZF": "rgb(0,255,198)"
+  - "AC0530:ZSCAN/KLF:C2H2_ZF": "rgb(0,255,210)"
+  - "AC0208:NR3C/AR:Nuclear_receptor": "rgb(0,255,216)"
+  - "AC0316:MTF:C2H2_ZF": "rgb(0,255,222)"
+  - "AC0103:POU3F/POU2F:Homeodomain,POU": "rgb(0,255,228)"
+  - "AC0555:NRF:Unknown": "rgb(0,255,234)"
+  - "AC0071:ZBTB:C2H2_ZF": "rgb(0,255,240)"
+  - "AC0066:USF/BHLHE:bHLH": "rgb(0,255,245)"
+  - "AC0068:HEY/CLOCK:bHLH": "rgb(0,255,251)"
+  - "AC0069:MAX/HES:bHLH": "rgb(0,252,255)"
+  - "AC0072:HIF1A/ARNT:bHLH": "rgb(0,246,255)"
+  - "AC0067:CREB3L/ATF6B:bZIP": "rgb(0,240,255)"
+  - "AC0633:CREB3L/XBP:bZIP": "rgb(0,228,255)"
+  - "AC0272:GMEB:SAND": "rgb(0,222,255)"
+  - "AC0322:ZNF:C2H2_ZF": "rgb(0,216,255)"
+  - "AC0526:GLI:C2H2_ZF": "rgb(0,210,255)"
+  - "AC0536:ZIC:C2H2_ZF": "rgb(0,204,255)"
+  - "AC0529:ZBTB7A/ZBTB7B:C2H2_ZF": "rgb(0,199,255)"
+  - "AC0517:EGR:C2H2_ZF": "rgb(0,193,255)"
+  - "AC0519:EGR/WT:C2H2_ZF": "rgb(0,187,255)"
+  - "AC0518:ZNF/VEZF:C2H2_ZF": "rgb(0,181,255)"
+  - "AC0523:KLF/SP:C2H2_ZF": "rgb(0,175,255)"
+  - "AC0524:KLF/SP:C2H2_ZF": "rgb(0,169,255)"
+  - "AC0525:ZNF/MAZ:C2H2_ZF": "rgb(0,157,255)"
+  - "AC0571:ZNF/PRDM:C2H2_ZF": "rgb(0,151,255)"
+  - "AC0563:ZNF/RBAK:C2H2_ZF": "rgb(0,145,255)"
+  - "AC0618:ZNF:C2H2_ZF": "rgb(0,139,255)"
+  - "AC0616:ZNF:C2H2_ZF": "rgb(0,134,255)"
+  - "AC0576:ZSCAN/ZNF:C2H2_ZF": "rgb(0,128,255)"
+  - "AC0580:ZNF:C2H2_ZF": "rgb(0,122,255)"
+  - "AC0166:ZNF:C2H2_ZF": "rgb(0,116,255)"
+  - "AC0299:OSR:C2H2_ZF": "rgb(0,110,255)"
+  - "AC0613:ZNF:C2H2_ZF": "rgb(0,104,255)"
+  - "AC0500:EBF:['Rel_homology_region_(RHR)_factors']": "rgb(0,98,255)"
+  - "AC0498:TFAP2C/TFAP2A:AP-2": "rgb(0,86,255)"
+  - "AC0499:TFAP2A/TFAP2C:AP-2": "rgb(0,80,255)"
+  - "AC0497:TFAP2A/TFAP2C:AP-2": "rgb(0,75,255)"
+  - "AC0495:CTCF/CTCFL:C2H2_ZF": "rgb(0,69,255)"
+  - "AC0494:ZIC/GLIS:C2H2_ZF": "rgb(0,63,255)"
+  - "AC0527:GLIS:C2H2_ZF": "rgb(0,57,255)"
+  - "AC0549:GCM:GCM": "rgb(0,51,255)"
+  - "AC0326:DPF/ZBTB:C2H2_ZF": "rgb(0,45,255)"
+  - "AC0084:OLIG/NEUROG:bHLH": "rgb(0,39,255)"
+  - "AC0074:ZBTB/TWIST:C2H2_ZF": "rgb(0,33,255)"
+  - "AC0083:SNAI/TCF:bHLH": "rgb(0,27,255)"
+  - "AC0078:NHLH/TFAP:bHLH": "rgb(0,15,255)"
+  - "AC0075:MYOD/MYOG:bHLH": "rgb(1,12,255)"
+  - "AC0086:MEIS/PKNOX:Homeodomain": "rgb(3,8,255)"
+  - "AC0085:ZNF:C2H2_ZF": "rgb(5,4,255)"
+  - "AC0302:ZIM:C2H2_ZF": "rgb(7,0,255)"
+  - "AC0039:FOXD/FOXK:Forkhead": "rgb(13,0,255)"
+  - "AC0040:FOXA/FOXC:Forkhead": "rgb(19,0,255)"
+  - "AC0038:FOXO/FOXP:Forkhead": "rgb(25,0,255)"
+  - "AC0036:FOXO:Forkhead": "rgb(31,0,255)"
+  - "AC0061:PITX/OTX:Homeodomain": "rgb(37,0,255)"
+  - "AC0059:RHOXF/DPRX:Homeodomain": "rgb(43,0,255)"
+  - "AC0137:REST:C2H2_ZF": "rgb(49,0,255)"
+  - "AC0594:ZNF:C2H2_ZF": "rgb(60,0,255)"
+  - "AC0657:RUNX:Runt": "rgb(66,0,255)"
+  - "AC0658:RUNX:Runt": "rgb(72,0,255)"
+  - "AC0062:NKX:Homeodomain": "rgb(78,0,255)"
+  - "AC0308:LEF/TCF:Sox": "rgb(84,0,255)"
+  - "AC0312:ZBTB/BANP:C2H2_ZF": "rgb(90,0,255)"
+  - "AC0459:SIX/ZNF:Homeodomain": "rgb(96,0,255)"
+  - "AC0672:IRF/STAT:IRF": "rgb(102,0,255)"
+  - "AC0671:IRF:IRF": "rgb(108,0,255)"
+  - "AC0274:SIX/GATA:Homeodomain": "rgb(113,0,255)"
+  - "AC0284:DMRT/DMRTA:DM": "rgb(119,0,255)"
+  - "AC0273:BATF/FOSL:bZIP": "rgb(131,0,255)"
+  - "AC0087:MEIS/TGIF:Homeodomain": "rgb(137,0,255)"
+  - "AC0238:PBX/PKNOX:Homeodomain": "rgb(143,0,255)"
+  - "AC0096:PBX/HOXA:Homeodomain": "rgb(149,0,255)"
+  - "AC0622:CUX/ONECUT:CUT,Homeodomain": "rgb(155,0,255)"
+  - "AC0624:ONECUT:CUT,Homeodomain": "rgb(161,0,255)"
+  - "AC0625:PAX:Homeodomain,Paired_box": "rgb(167,0,255)"
+  - "AC0098:MEIS/PBX:Homeodomain": "rgb(173,0,255)"
+  - "AC0241:GFI/GFI1B:C2H2_ZF": "rgb(178,0,255)"
+  - "AC0240:NFYA/NFYB:CBF/NF-Y": "rgb(184,0,255)"
+  - "AC0197:ZNF:C2H2_ZF": "rgb(190,0,255)"
+  - "AC0029:NKX/MSANTD:['Homeo_domain_factors']": "rgb(202,0,255)"
+  - "AC0051:BATF/IRF:bZIP": "rgb(208,0,255)"
+  - "AC0049:JUND/JUN:bZIP": "rgb(214,0,255)"
+  - "AC0046:BACH/NFE:bZIP": "rgb(220,0,255)"
+  - "AC0259:MAFG/MAFF:bZIP": "rgb(226,0,255)"
+  - "AC0258:NRL/MAFG:bZIP": "rgb(232,0,255)"
+  - "AC0256:MAFF/MAF:bZIP": "rgb(238,0,255)"
+  - "AC0631:ATF/CREB:bZIP": "rgb(243,0,255)"
+  - "AC0629:DBP/HLF:bZIP": "rgb(247,0,253)"
+  - "AC0628:CEBPB/CEBPE:bZIP": "rgb(249,0,249)"
+  - "AC0636:POU5F/NANOG:Homeodomain,POU": "rgb(251,0,245)"
+  - "AC0637:POU2F/POU3F:Homeodomain,POU": "rgb(255,0,236)"
+  - "AC0102:POU2F/POU3F:Homeodomain,POU": "rgb(255,0,230)"
+  - "AC0101:POU3F/POU2F:Homeodomain,POU": "rgb(255,0,224)"
+  - "AC0089:POU4F:Homeodomain,POU": "rgb(255,0,218)"
+  - "AC0088:POU4F/POU5F:Homeodomain,POU": "rgb(255,0,212)"
+  - "AC0090:POU3F/POU1F:Homeodomain,POU": "rgb(255,0,207)"
+  - "AC0056:HOXC/HOXA:Homeodomain": "rgb(255,0,201)"
+  - "AC0055:HOXC/HOXD:Homeodomain": "rgb(255,0,195)"
+  - "AC0054:ELK/ETV:Ets": "rgb(255,0,189)"
+  - "AC0034:BARHL:Homeodomain": "rgb(255,0,183)"
+  - "AC0042:FOXA/FOXB:Forkhead": "rgb(255,0,177)"
+  - "AC0650:HNF1A/HNF1B:Homeodomain": "rgb(255,0,165)"
+  - "AC0063:HOXB/LHX:Homeodomain": "rgb(255,0,159)"
+  - "AC0005:POU6F/NKX:Homeodomain": "rgb(255,0,153)"
+  - "AC0006:POU3F/POU1F:Homeodomain,POU": "rgb(255,0,147)"
+  - "AC0327:ZNF:C2H2_ZF": "rgb(255,0,142)"
+  - "AC0249:SOX:Sox": "rgb(255,0,136)"
+  - "AC0027:NKX:Homeodomain": "rgb(255,0,130)"
+  - "AC0026:HMX/ISL:Homeodomain": "rgb(255,0,124)"
+  - "AC0003:HOXB/BARHL:Homeodomain": "rgb(255,0,118)"
+  - "AC0004:PAX/LHX:Homeodomain": "rgb(255,0,112)"
+  - "AC0015:PAX/VSX:Homeodomain": "rgb(255,0,106)"
+  - "AC0018:CUX:CUT,Homeodomain": "rgb(255,0,94)"
+  - "AC0021:HOXD/FOXC:Homeodomain": "rgb(255,0,88)"
+  - "AC0030:NKX:Homeodomain": "rgb(255,0,82)"
+  - "AC0151:PAX/WT:Homeodomain": "rgb(255,0,77)"
+  - "AC0153:ZNF/DMRT:C2H2_ZF": "rgb(255,0,71)"
+  - "AC0265:CENPBD/GMEB:CxxC": "rgb(255,0,65)"
+  - "AC0667:STAT/STAT5A:STAT": "rgb(255,0,59)"
+grid:
+  rows: 4
+  columns: 1
+  pattern: independent
+subtitles:
+  - Group 1
+  - Group 2
+  - Group 3
+  - Group 4
+traces:
+  - result_key: motifact1
+    mode: lines
+    name: "AC0001:DLX/LHX:Homeodomain"
+    line:
+      color: rgb(255,0,53)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact2
+    mode: lines
+    name: "AC0024:POU3F/HESX:Homeodomain"
+    line:
+      color: rgb(255,0,47)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact3
+    mode: lines
+    name: "AC0002:EMX/PAX:Homeodomain"
+    line:
+      color: rgb(255,0,41)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact4
+    mode: lines
+    name: "AC0010:PROP/ALX:Homeodomain"
+    line:
+      color: rgb(255,0,35)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact5
+    mode: lines
+    name: "AC0009:DUXA/DUX:Homeodomain"
+    line:
+      color: rgb(255,0,23)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact6
+    mode: lines
+    name: "AC0651:ZNF:C2H2_ZF"
+    line:
+      color: rgb(255,0,23)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact7
+    mode: lines
+    name: "AC0652:TEAD:TEA"
+    line:
+      color: rgb(255,0,23)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact8
+    mode: lines
+    name: "AC0130:HNF4A/HNF4G:['Nuclear_receptors_with_C4_zinc_fingers']"
+    line:
+      color: rgb(255,0,23)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact9
+    mode: lines
+    name: "AC0131:HNF4A/HNF4G:Nuclear_receptor"
+    line:
+      color: rgb(255,0,23)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact10
+    mode: lines
+    name: "AC0132:NR2F/RXRG:Nuclear_receptor"
+    line:
+      color: rgb(255,0,23)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact11
+    mode: lines
+    name: "AC0133:NR6A:Nuclear_receptor"
+    line:
+      color: rgb(255,0,23)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact12
+    mode: lines
+    name: "AC0121:ESRRA/NR5A:Nuclear_receptor"
+    line:
+      color: rgb(255,0,23)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact13
+    mode: lines
+    name: "AC0114:NR4A/NR2C:Nuclear_receptor"
+    line:
+      color: rgb(255,0,23)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact14
+    mode: lines
+    name: "AC0112:NR2F/RXRA:Nuclear_receptor"
+    line:
+      color: rgb(255,0,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact15
+    mode: lines
+    name: "AC0124:RARA/RARG:Nuclear_receptor"
+    line:
+      color: rgb(255,5,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact16
+    mode: lines
+    name: "AC0123:NR1D/RORC:Nuclear_receptor"
+    line:
+      color: rgb(255,11,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact17
+    mode: lines
+    name: "AC0122:ESR/ESRRA:Nuclear_receptor"
+    line:
+      color: rgb(255,17,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact18
+    mode: lines
+    name: "AC0113:RARA/ESRRA:Nuclear_receptor"
+    line:
+      color: rgb(255,23,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact19
+    mode: lines
+    name: "AC0116:THRB/ESRRA:Nuclear_receptor"
+    line:
+      color: rgb(255,29,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact20
+    mode: lines
+    name: "AC0115:NR1I/NR1H:Nuclear_receptor"
+    line:
+      color: rgb(255,35,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact21
+    mode: lines
+    name: "AC0125:NR1I/VDR:Nuclear_receptor"
+    line:
+      color: rgb(255,41,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact22
+    mode: lines
+    name: "AC0126:NR1I/VDR:Nuclear_receptor"
+    line:
+      color: rgb(255,47,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact23
+    mode: lines
+    name: "AC0127:TCF7L/LEF:Sox"
+    line:
+      color: rgb(255,53,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact24
+    mode: lines
+    name: "AC0196:ZNF:C2H2_ZF"
+    line:
+      color: rgb(255,59,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact25
+    mode: lines
+    name: "AC0120:THRB:Nuclear_receptor"
+    line:
+      color: rgb(255,64,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact26
+    mode: lines
+    name: "AC0108:RXRG/RARB:Nuclear_receptor"
+    line:
+      color: rgb(255,76,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact27
+    mode: lines
+    name: "AC0110:NR2F/NR1H:Nuclear_receptor"
+    line:
+      color: rgb(255,82,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact28
+    mode: lines
+    name: "AC0142:ZNF:C2H2_ZF"
+    line:
+      color: rgb(255,88,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact29
+    mode: lines
+    name: "AC0584:ZSCAN:C2H2_ZF"
+    line:
+      color: rgb(255,94,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact30
+    mode: lines
+    name: "AC0588:ZNF:C2H2_ZF"
+    line:
+      color: rgb(255,100,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact31
+    mode: lines
+    name: "AC0477:HIC:C2H2_ZF"
+    line:
+      color: rgb(255,106,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact32
+    mode: lines
+    name: "AC0479:NFIA/NFIC:SMAD"
+    line:
+      color: rgb(255,112,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact33
+    mode: lines
+    name: "AC0480:NFIX/NFIC:SMAD"
+    line:
+      color: rgb(255,118,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact34
+    mode: lines
+    name: "AC0511:YY/ZFP:C2H2_ZF"
+    line:
+      color: rgb(255,124,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact35
+    mode: lines
+    name: "AC0482:E2F:E2F"
+    line:
+      color: rgb(255,129,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact36
+    mode: lines
+    name: "AC0548:E2F:E2F"
+    line:
+      color: rgb(255,135,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact37
+    mode: lines
+    name: "AC0547:E2F/ZNF:E2F"
+    line:
+      color: rgb(255,147,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact38
+    mode: lines
+    name: "AC0545:E2F/TFDP:E2F"
+    line:
+      color: rgb(255,153,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact39
+    mode: lines
+    name: "AC0615:ZNF:C2H2_ZF"
+    line:
+      color: rgb(255,159,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact40
+    mode: lines
+    name: "AC0641:ETV/ETS:Ets"
+    line:
+      color: rgb(255,165,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact41
+    mode: lines
+    name: "AC0642:SPIB/SPI:Ets"
+    line:
+      color: rgb(255,171,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact42
+    mode: lines
+    name: "AC0640:ELF/ETV:Ets"
+    line:
+      color: rgb(255,177,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact43
+    mode: lines
+    name: "AC0639:FOXO1::ELK/ERF::FOXO:['Tryptophan_cluster_factors',_'Fork_head/winged_helix_factors']"
+    line:
+      color: rgb(255,183,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact44
+    mode: lines
+    name: "AC0643:ETS/ETV:Ets"
+    line:
+      color: rgb(255,189,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact45
+    mode: lines
+    name: "AC0509:ZNF:C2H2_ZF"
+    line:
+      color: rgb(255,194,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact46
+    mode: lines
+    name: "AC0271:PROX:Prospero"
+    line:
+      color: rgb(255,200,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact47
+    mode: lines
+    name: "AC0199:ZNF:C2H2_ZF"
+    line:
+      color: rgb(255,206,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact48
+    mode: lines
+    name: "AC0200:ZNF:C2H2_ZF"
+    line:
+      color: rgb(255,218,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact49
+    mode: lines
+    name: "AC0531:ZNF:C2H2_ZF"
+    line:
+      color: rgb(255,224,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1
+  - result_key: motifact50
+    mode: lines
+    name: "AC0486:SREBF:bHLH"
+    line:
+      color: rgb(255,230,0)
+      width: 1
+    xaxis: x1
+    yaxis: y1

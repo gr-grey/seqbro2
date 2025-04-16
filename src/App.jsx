@@ -15,6 +15,9 @@ function App() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [genome, setGenome] = useState(() => searchParams.get('g') || "hg38")
   const [chromosome, setChromosome] = useState(() => searchParams.get('c') || "chr7")
+  // const [model, setModel] = useState(() => searchParams.get('m') || "puffin")
+  const [model, setModel] = useState(() => searchParams.get('m') || "motif")
+
   const [centerCoordinate, setCenterCoordinate] = useState(() => {
     const pos = searchParams.get('pos')
     return pos ? Math.max(1, parseInt(pos)) : 5530600
@@ -125,26 +128,30 @@ function App() {
   const [plotCoords, setPlotCoords] = useState([0, 0, 0])
   const [seqCoords, setSeqCoords] = useState([0, 0, 0])
 
+  const [showEachMotif, setShowEachMotif] = useState(false)
+
   // URL update effect
   useEffect(() => {
     const params = new URLSearchParams({
       g: genome,
       c: chromosome,
       pos: centerCoordinate.toString(),
-      s: strand
+      s: strand,
+      m: model
     })
 
     // Only update if different from current URL
     if (params.toString() !== searchParams.toString()) {
       setSearchParams(params, { replace: true })
     }
-  }, [genome, chromosome, centerCoordinate, strand, searchParams, setSearchParams])
+  }, [genome, chromosome, centerCoordinate, strand, model, searchParams, setSearchParams])
 
   // load configs
   useEffect(() => {
-    loadConfigFile('/puffin.config.json', configs, setIsConfigsLoaded)
 
-  }, [])
+    loadConfigFile(`/${model}.config.json`, configs, setIsConfigsLoaded)
+
+  }, [model])
 
   // init infWorker
   useEffect(() => {
@@ -225,6 +232,7 @@ function App() {
       isInitedScrolled.current = true
     }, 10)
   }
+
   // get sequence
   useEffect(() => {
     if (isWorkerInited) { initPlot() }
@@ -267,7 +275,6 @@ function App() {
 
       if (boxCenterChunkId.current === 1) {
         // need to fetch new chunks
-        // console.log('update with new left chunk')
 
         // pad Xs for sequence
         setSeq([seqChunkFiller, seqList.current[0], seqList.current[1]].join(""))
@@ -289,7 +296,6 @@ function App() {
 
         extendFixedLists('left', strand, true)
         rightUpdateTriggerPoint.current += plotBoxScrollWidth.current // move the trigger point further down
-
 
       } else {
         // only shift to left
@@ -319,7 +325,6 @@ function App() {
 
       if (boxCenterChunkId.current === items.length - 2) {
         console.log('update and fetch on right')
-
 
         const lastIdx = seqList.current.length - 1
         setSeq([seqList.current[lastIdx - 1], seqList.current[lastIdx], seqChunkFiller].join(""))
@@ -373,7 +378,6 @@ function App() {
     else {
 
       const plotPos = seqScrollToPlotScrollOffset.current + (scrollLeft - seqBoxScrollWidth.current) / seqBoxPxPerBase * plotBoxPxPerBase.current + boxCenterChunkId.current * plotBoxScrollWidth.current
-
 
       plotbox.current.scrollTo(Math.round(plotPos))
 
@@ -591,6 +595,7 @@ function App() {
 
   }
 
+  const rows = Array.from({ length: 10 });
 
   return (
     <div className='mx-2'>
@@ -654,6 +659,42 @@ function App() {
           </div>
         </div>
 
+        {/* each motif row */}
+
+        {showEachMotif && isFirstChunkInited &&
+          <div className='relative h-[10rem] mt-2 overflow-y-auto border border-gray-500'>
+            <div className="overflow-x-auto">
+              {/* A simple vertical stack of rows */}
+              {rows.map((_, index) => (
+                <div key={index}>
+
+                  <div className='absolute left-[50%] translate-x-[-50%]'> {`motif${index + 1}`} </div>
+
+                  <div className='inline-block'> {""}</div>
+                  <div className="font-mono whitespace-nowrap">
+                    {
+                      seq.split("").map((char, index) => (
+                        <Tippy content={tooltips[index]} key={index}>
+                          <span style={{
+                            backgroundColor: annoColors[index],
+                            display: 'inline-block',
+                            width: seqBoxPxPerBase,
+                          }}>
+                            {char}
+                          </span>
+                        </Tippy>
+                      ))
+                    }
+                  </div>
+
+                </div>
+              ))}
+
+            </div>
+          </div>
+        }
+
+        {/* Plot box */}
         {/* plotBox ruler */}
         <div className='relative h-10 border-b-1'>
           {/* coordinates */}
@@ -682,9 +723,7 @@ function App() {
           ></div>
         </div>
 
-        {/* Plot box */}
-
-        {isFirstChunkInited ?
+        { isFirstChunkInited ?
           <div className='mt-2'>
             {/* Plot title */}
             {<div className="w-full h-4 mb-4 text-xl flex items-center justify-center">{configs.current.title}</div>}
@@ -740,6 +779,7 @@ function App() {
           : 'Loading...'
         }
 
+
       </div>
     </div>
   )
@@ -762,7 +802,7 @@ const loadConfigFile = async (configFile, configs, setIsConfigsLoaded) => {
       motifs.push(name)
       motifColors.push(color)
     }
-    const hslColors = motifColors.map(hex => hexToHsl(hex))
+    const hslColors = motifColors.map(hex => colorStrToHSL(hex))
 
     configs.current.yDataKeys = data.traces.map(item => item.result_key)
     configs.current.motifNames = motifs
@@ -783,9 +823,17 @@ const hexToRgb = hex => {
   return [r, g, b];
 };
 
-// Helper: Convert Hex to HSL
-const hexToHsl = (hex) => {
-  const rgb = hexToRgb(hex); // Convert hex to RGB
+function parseRGB(rgbString) {
+  const match = rgbString.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+  if (!match) throw new Error("Invalid RGB format");
+  return match.slice(1, 4).map(Number);
+}
+
+// Helper: Convert RGB or Hex to HSL
+const colorStrToHSL = (hex) => {
+
+  const rgb = hex.startsWith('rgb') ? parseRGB(hex) : hexToRgb(hex); // rgb(r,g,b) or #hex string
+
   const [r, g, b] = rgb.map(v => v / 255); // Normalize to [0, 1]
 
   const max = Math.max(r, g, b);
@@ -882,16 +930,25 @@ const getPlotData = (plotDataMatrix, start, end, strand, plotConfig) => {
     const yData = plotDataMatrix[index]
     if (!yData) return null // Skip if yData is unavailable
 
+    const filter_min = traceConfig.filter_min
+    const filter_max = traceConfig.filter_max
+
+    // Keep all x, but filter y values below threshold by setting them to null
+    const yFiltered_min = filter_min ? yData.map(y => (y > filter_min ? y : null)) : yData
+
+    const yFiltered = filter_min ? yFiltered_min.map(y => (y < filter_max ? y : filter_max)) : yData
+    // const yFiltered = yData
+
+    const trace = { x: xs, y: yFiltered }
+    // Copy all properties from traceConfig except 'result_key'
+    for (const [key, value] of Object.entries(traceConfig)) {
+      if (key !== "result_key" && key !== "filter_min") {
+        trace[key] = value;
+      }
+    }
+
     // Create trace using the configuration and data
-    return {
-      x: xs,
-      y: yData,
-      mode: traceConfig.mode,
-      name: traceConfig.name,
-      line: traceConfig.line,
-      xaxis: traceConfig.xaxis,
-      yaxis: traceConfig.yaxis,
-    };
+    return trace
   });
 
   // Filter out any null traces (in case of missing data)
@@ -908,11 +965,21 @@ const getSeqPlotAnno = async (start, end, genome, chromosome, strand, isWorkerIn
   const plotMat = configs.current.yDataKeys.map(key => Array.from(results[key].cpuData)) // plotMatrix
   const plotData = getPlotData(plotMat, start, end, strand, configs)
 
-  const xaxisLayout = { tickformat: 'd', autorange: strand === '-' ? 'reversed' : true, }
+  const xaxisLayout = {
+    tickformat: 'd',
+    autorange: false,
+    range: strand === '-' ? [end, start] : [start, end]
+  }
   const totalPlots = configs.current.grid.rows * configs.current.grid.columns;
   const axisLayout = {};
   for (let i = 0; i < totalPlots; i++) {
     axisLayout[`xaxis${i + 1}`] = xaxisLayout;
+  }
+
+  if (configs.current.yaxisLayout) {
+    for (const [key, value] of Object.entries(configs.current.yaxisLayout)) {
+      axisLayout[key] = value;
+    }
   }
 
   const plotLayout = {

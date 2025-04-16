@@ -26,39 +26,54 @@ self.onmessage = async (event) => {
             const end = data.end
             const offset = conf.convOffset
 
+            const infThreshold = conf.threshold ? conf.threshold : null
+
             // fetch sequence
             const infSeq = await fetchSequence(start - offset, end + offset, data.genome, data.chromosome, data.strand)
             const sequence = infSeq.slice(offset, -offset)
             const seqEncoded = encodeSequence(infSeq)
             const seqTensor = new ort.Tensor('float32', seqEncoded.flat(), [1, 4, infSeq.length])
-            
-            // run inference
-            const feeds = { [inferenceSession.inputNames[0]]: seqTensor }
-            const results = await inferenceSession.run(feeds)
-            
-            // post inference anno processing
-            // yDataKeys, motifNames, motifColorsHSL
-            const annoScores = []
+            const thresholdTensor = new ort.Tensor('float32', [infThreshold], [1])
 
-            for (const key of conf.annoInputs) {
-                const tensor = results[key] // Access the tensor using the key
-                annoScores.push(Array.from(tensor.cpuData)) // Convert tensor data to an array
+            // run inference
+            const feeds = infThreshold ? { "encoded_seq": seqTensor, "threshold": thresholdTensor } : { [inferenceSession.inputNames[0]]: seqTensor }
+
+            const results = await inferenceSession.run(feeds)
+
+            if (conf.inf_annos) {
+
+                const max_idx = results['max_idx'].cpuData
+                const scaled_all_motifs = results['scaled_one_row'].cpuData
+                const { tooltips, annocolors } = annoColorTooltips(start, end, data.strand, max_idx, scaled_all_motifs, conf.motifColorsHSL, conf.scaledThreshold, conf.motifNames)
+
+                self.postMessage({ type: "inference_done", sequence, results, tooltips, annocolors, requestId })
+
+            } else {
+
+                // post inference anno processing
+                // yDataKeys, motifNames, motifColorsHSL
+                const annoScores = []
+
+                for (const key of conf.annoInputs) {
+                    const tensor = results[key].cpuData// Access the tensor using the key
+                    annoScores.push(Array.from(tensor)) // Convert tensor data to an array
+                }
+
+                // Flatten and create input tensor
+                const flatAnnoScores = annoScores.flat()
+                const stackedTensor = new ort.Tensor('float32', flatAnnoScores, [conf.annoInputs.length, end - start])
+                const annoFeeds = { motif_scores: stackedTensor } // motif_scores is input label for max_index.onnx
+                const { max_values, max_indices, max_all } = await annoSession.run(annoFeeds)
+                const maxValues = max_values.cpuData
+                const maxIndices = max_indices.cpuData
+                const maxAll = max_all.cpuData[0]
+
+                const { tooltips, annocolors } = annoSetup(start, end, data.strand, maxIndices, maxValues, maxAll, conf.motifColorsHSL, conf.scaledThreshold, conf.motifNames)
+
+
+                self.postMessage({ type: "inference_done", sequence, results, tooltips, annocolors, requestId })
             }
 
-            // Flatten and create input tensor
-            const flatAnnoScores = annoScores.flat()
-            const stackedTensor = new ort.Tensor('float32', flatAnnoScores, [conf.annoInputs.length, end - start])
-            const annoFeeds = { motif_scores: stackedTensor } // motif_scores is input label for max_index.onnx
-            const { max_values, max_indices, max_all } = await annoSession.run(annoFeeds)
-            const maxValues = max_values.cpuData
-            const maxIndices = max_indices.cpuData
-            const maxAll = max_all.cpuData[0]
-
-            const { tooltips, annocolors } = annoSetup(start, end, data.strand, maxIndices, maxValues, maxAll, conf.motifColorsHSL, conf.scaledThreshold, conf.motifNames)
-            
-            
-            
-            self.postMessage({ type: "inference_done", sequence, results, tooltips, annocolors, requestId })
 
         }
     } catch (error) {
@@ -105,6 +120,44 @@ const range = (start, stop, step = 1) =>
 // Helper: Convert HSL to CSS String
 const hslToCss = (h, s, l) => `hsl(${h}, ${s}%, ${l}%)`;
 
+// Updated getTooltips function
+const annoColorTooltips = (start, end, strand, max_idx, scaled_all_motifs, motifColorsHSL, scaledThreshold, motifNames) => {
+
+
+    // Reverse range if strand is '-'
+    const coordinates = strand === '-' ? range(end, start, -1) : range(start, end)
+
+    // Initialize arrays
+    const tooltips = []
+    const annocolors = []
+    // const scaledAnnoScores = []
+
+    // Loop through each base pair to calculate values
+    coordinates.forEach((coordinate, index) => {
+        const motifIndex = max_idx[index]
+        const scaledScore = scaled_all_motifs[index]
+
+        // Generate tooltip
+        if (scaledScore < scaledThreshold) {
+            tooltips.push(`${coordinate}`) // Only coordinate if below threshold
+        } else {
+            const motifName = motifNames[Number(motifIndex)] // Get motif name
+            tooltips.push(`${coordinate} ${motifName}: (${scaledScore.toFixed(3)})`)
+        }
+
+        // Generate annotation color
+        if (scaledScore < scaledThreshold) {
+            annocolors.push("#FFFFFF") // White if below threshold
+        } else {
+            const [h, s, l] = motifColorsHSL[motifIndex]// Get HSL values for the motif
+            const blendedLightness = 100 - (100 - l) * scaledScore // Adjust lightness for intensity
+            annocolors.push(hslToCss(h, s, blendedLightness))
+        }
+    })
+
+    // Return tooltips and annotation colors
+    return { tooltips, annocolors }
+}
 // Updated getTooltips function
 const annoSetup = (start, end, strand, maxIndices, maxValues, maxAll, motifColorsHSL, scaledThreshold, motifNames) => {
 
