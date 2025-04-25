@@ -150,7 +150,7 @@ const annoColorTooltips = (start, end, strand, max_idx, scaled_all_motifs, motif
             annocolors.push("#FFFFFF") // White if below threshold
         } else {
             const [h, s, l] = motifColorsHSL[motifIndex]// Get HSL values for the motif
-            const blendedLightness = 100 - (100 - l) * scaledScore // Adjust lightness for intensity
+            const blendedLightness = Math.round(100 - (100 - l) * scaledScore) // Adjust lightness for intensity
             annocolors.push(hslToCss(h, s, blendedLightness))
         }
     })

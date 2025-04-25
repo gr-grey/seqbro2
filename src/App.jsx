@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import './App.css'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Outlet, Link } from 'react-router-dom'
 import inferenceWorker from "./inferenceWorker?worker"
 import { FixedSizeList as List } from 'react-window'
 import GenomeForm from './GenomeForm'
@@ -597,6 +597,26 @@ function App() {
 
   const rows = Array.from({ length: 10 });
 
+
+  const openEachMotif = () => {
+    // opens a new tab at /each_motif?g=...&c=...
+    const child = window.open(`/each_motif?${searchParams.toString()}`, '_blank')
+
+    const payload = {
+      seq: seqList.current[0],
+      tooltip: tooltipsList.current[0],
+      annotation: annoList.current[0],
+    }
+    // wait for child to say read for message sending
+    const handleReady = (e) => {
+      if (e.source === child && e.data === 'READY_FOR_DATA') {
+        child.postMessage({type: 'INIT_DATA', payload}, window.location.origin)
+        window.removeEventListener('message', handleReady)
+      }
+    }
+    window.addEventListener('message', handleReady)
+  }
+
   return (
     <div className='mx-2'>
       <h1 className="my-4 text-3xl font-extrabold text-gray-900 dark:text-white md:text-5xl lg:text-6xl"><span className="text-transparent bg-clip-text bg-gradient-to-r to-emerald-600 from-sky-400">Sequence browser</span> demo</h1>
@@ -694,6 +714,10 @@ function App() {
           </div>
         }
 
+        {/* each motif button */}
+        <button onClick={openEachMotif} className="mt-2 py-2.5 px-5 me-2 mb-2 text-sm font-medium text-gray-900 bg-white rounded-lg border border-gray-700 hover:bg-gray-100 hover:text-blue-700 focus:ring-4 focus:ring-gray-100">Each motif</button>
+
+
         {/* Plot box */}
         {/* plotBox ruler */}
         <div className='relative h-10 border-b-1'>
@@ -723,7 +747,7 @@ function App() {
           ></div>
         </div>
 
-        { isFirstChunkInited ?
+        {isFirstChunkInited ?
           <div className='mt-2'>
             {/* Plot title */}
             {<div className="w-full h-4 mb-4 text-xl flex items-center justify-center">{configs.current.title}</div>}
