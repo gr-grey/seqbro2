@@ -53,6 +53,8 @@ export default function EachMotif() {
     const seqRows = useRef(null)
     const nameRows = useRef(null)
 
+    const logoRows = useRef(null)
+
     // to sync scroll horizontally
     const oneRowRef = useRef(null)
     const motifsRef = useRef(null)
@@ -144,6 +146,7 @@ export default function EachMotif() {
             seqRows.current = maskedSeqs
 
             nameRows.current = keptIndices.map(idx => configs.current.motifNames[idx])
+            logoRows.current = keptIndices.map(idx => `motif${idx + 1}`)
 
 
             setIsContentReady(true)
@@ -176,13 +179,86 @@ export default function EachMotif() {
         scrollingBox.current = 'motifs'
     }
 
-    // track whether we’re hovering a motif name, its cursor position, and which image to show
-    const [logo, setLogo] = useState({
-        visible: false,
-        x: 0,
-        y: 0,
-        src: "",
-    })
+    const [selectedLogo, setSelectedLogo] = useState(null)
+    const logoRef = useRef(null)
+
+    const handleNameClick = name => {
+        const src = `/motif_logos/${name}.png`
+        if (selectedLogo === src) {
+            setSelectedLogo(null)
+        } else {
+            setSelectedLogo(src)
+        }
+    }
+
+    // const onMouseDown = e => {
+    //     const img = logoRef.current
+    //     if (!img) return
+
+    //     // prevent browser’s own drag preview
+    //     img.draggable = false
+
+    //     // figure out where inside the image you clicked
+    //     const rect = img.getBoundingClientRect()
+    //     const shiftX = e.clientX - rect.left
+    //     const shiftY = e.clientY - rect.top
+
+    //     // move function
+    //     const moveAt = e => {
+    //         img.style.left = e.clientX - shiftX + 'px'
+    //         img.style.top = e.clientY - shiftY + 'px'
+    //     }
+
+    //     // start listening
+    //     document.addEventListener('mousemove', moveAt)
+    //     document.addEventListener(
+    //         'mouseup',
+    //         () => { document.removeEventListener('mousemove', moveAt) },
+    //         { once: true }
+    //     )
+
+    //     e.preventDefault()
+    // }
+
+    const onMouseDown = e => {
+        const el = logoRef.current;
+        if (!el) return;
+
+        // get bounding box + click offset
+        const rect = el.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // define how big the resize-zone should be (px)
+        const RESIZE_ZONE = 16;
+
+        // if we clicked inside the bottom-right corner…
+        if (
+            x > rect.width - RESIZE_ZONE &&
+            y > rect.height - RESIZE_ZONE
+        ) {
+            // let the browser handle the resize
+            return;
+        }
+
+        // otherwise: do your drag logic
+        el.draggable = false;
+        const shiftX = e.clientX - rect.left;
+        const shiftY = e.clientY - rect.top;
+
+        const moveAt = e => {
+            el.style.left = e.clientX - shiftX + 'px';
+            el.style.top = e.clientY - shiftY + 'px';
+        };
+
+        document.addEventListener('mousemove', moveAt);
+        document.addEventListener('mouseup', () => {
+            document.removeEventListener('mousemove', moveAt);
+        }, { once: true });
+
+        // only preventDefault when dragging
+        e.preventDefault();
+    };
 
     return (
         <div style={{ padding: 20 }}>
@@ -221,26 +297,9 @@ export default function EachMotif() {
                                 //  eachRow is a string of 3000 len 
                                 <div key={i}>
                                     {/* sequence name, alway in the middle of screen */}
-                                    {/* <div className='absolute left-[50%] translate-x-[-50%]'> {nameRows.current[i]} </div> */}
-
                                     <div
-                                        className="absolute left-[50%] translate-x-[-50%] cursor-default"
-                                        onMouseEnter={e =>
-                                            setLogo({
-                                                visible: true,
-                                                x: e.clientX,
-                                                y: e.clientY,
-                                                // dynamically point at whatever PNG you want:
-                                                src: `/motif_logos/motif1.png`,
-                                                // or `/motif_logos/${nameRows.current[i]}.png`
-                                            })
-                                        }
-                                        onMouseMove={e =>
-                                            setLogo(t => ({ ...t, x: e.clientX, y: e.clientY }))
-                                        }
-                                        onMouseLeave={() =>
-                                            setLogo(t => ({ ...t, visible: false }))
-                                        }
+                                        className='absolute left-[50%] translate-x-[-50%] cursor-pointer hover:text-blue-700'
+                                        onClick={() => handleNameClick(logoRows.current[i])}
                                     >
                                         {nameRows.current[i]}
                                     </div>
@@ -267,23 +326,31 @@ export default function EachMotif() {
                             ))}
                         </div>
 
-                        {/* the floating image “tooltip” */}
-                        {logo.visible && (
-                            <img
-                                src={logo.src}
-                                alt=""
-                                className="pointer-events-none z-50"
-                                style={{
-                                    position: "fixed",               // so it follows the viewport
-                                    top: logo.y + "px",      // offset so it’s not under the cursor
-                                    left: logo.x + 12 + "px",
-                                    // maxWidth: "200px",
-                                    maxHeight: "80px",
-                                }}
-                            />
+                        {/* Sequence logo */}
+                        {selectedLogo && (
+                            <div
+                                ref={logoRef}                          // now on the wrapper
+                                onMouseDown={onMouseDown}              // drag logic still works
+                                className="fixed top-4 right-4 w-150 h-auto resize overflow-auto bg-white p-2 rounded shadow-md z-50 cursor-grab min-w-[12rem] min-h-[8rem]"
+
+                            >
+                                {/* Close button */}
+                                <button
+                                    onClick={() => setSelectedLogo(null)}
+                                    className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-gray-200 hover:bg-gray-300 text-gray-800"
+                                >
+                                    ×
+                                </button>
+
+                                {/* The logo image */}
+                                <img
+                                    src={selectedLogo}
+                                    alt="Sequence logo"
+                                    className="w-full h-auto select-none pointer-events-none"
+                                    draggable={false}    // extra guard against native drag
+                                />
+                            </div>
                         )}
-
-
                     </div>
 
                     : <p>Loading content...</p>

@@ -423,7 +423,7 @@
             "AC0640:ELF/ETV:Ets": "rgb(255,177,0)"
         },
         {
-            "AC0639:FOXO1::ELK/ERF::FOXO:['Tryptophan_cluster_factors',_'Fork_head/winged_helix_factors']": "rgb(255,183,0)"
+            "AC0639:FOXO1::ELK/ERF::FOXO:['Tryptophan_cluster_factors_Fork_head/winged_helix_factors']": "rgb(255,183,0)"
         },
         {
             "AC0643:ETS/ETV:Ets": "rgb(255,189,0)"
@@ -642,7 +642,7 @@
             "AC0663:ZNF:C2H2_ZF": "rgb(0,255,139)"
         },
         {
-            "AC0076:ERF::FIGLA/ETV2::FIGLA:['Tryptophan_cluster_factors',_'Basic_helix-loop-helix_factors_(bHLH)']": "rgb(0,255,145)"
+            "AC0076:ERF::FIGLA/ETV2::FIGLA[Tryptophan_cluster_factors_Basic_helix-loop-helix_factors_(bHLH)]": "rgb(0,255,145)"
         },
         {
             "AC0081:SCRT:C2H2_ZF": "rgb(0,255,151)"
@@ -1492,7 +1492,7 @@
         {
             "result_key": "motifact43",
             "mode": "lines",
-            "name": "AC0639:FOXO1::ELK/ERF::FOXO:['Tryptophan_cluster_factors',_'Fork_head/winged_helix_factors']",
+            "name": "AC0639:FOXO1::ELK/ERF::FOXO:[Tryptophan_cluster_factors_Fork_head/winged_helix_factors]",
             "line": {
                 "color": "rgb(255,183,0)",
                 "width": 2
