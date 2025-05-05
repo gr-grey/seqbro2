@@ -75,6 +75,65 @@ self.onmessage = async (event) => {
             }
 
 
+        } else if (type === 'seqInference') { // run inference with just sequence
+            if (!inferenceSession) {
+                throw new Error("Onnx session not initialized")
+            }
+
+            const conf = data.configs.current
+            const infSeq = data.sequence
+            const offset = conf.convOffset
+            const sequence = infSeq.slice(offset, -offset)
+
+
+            const infThreshold = conf.threshold ? conf.threshold : null
+
+            const seqEncoded = encodeSequence(infSeq)
+            const seqTensor = new ort.Tensor('float32', seqEncoded.flat(), [1, 4, infSeq.length])
+            const thresholdTensor = new ort.Tensor('float32', [infThreshold], [1])
+
+            // run inference
+            const feeds = infThreshold ? { "encoded_seq": seqTensor, "threshold": thresholdTensor } : { [inferenceSession.inputNames[0]]: seqTensor }
+
+            const results = await inferenceSession.run(feeds)
+
+            const start = data.start
+            const end = data.end
+
+            if (conf.inf_annos) {
+
+                const max_idx = results['max_idx'].cpuData
+                const scaled_all_motifs = results['scaled_one_row'].cpuData
+                const { tooltips, annocolors } = annoColorTooltips(start, end, data.strand, max_idx, scaled_all_motifs, conf.motifColorsHSL, conf.scaledThreshold, conf.motifNames)
+
+                self.postMessage({ type: "inference_done", sequence, results, tooltips, annocolors, requestId })
+
+            } else {
+
+                // post inference anno processing
+                // yDataKeys, motifNames, motifColorsHSL
+                const annoScores = []
+
+                for (const key of conf.annoInputs) {
+                    const tensor = results[key].cpuData// Access the tensor using the key
+                    annoScores.push(Array.from(tensor)) // Convert tensor data to an array
+                }
+
+                // Flatten and create input tensor
+                const flatAnnoScores = annoScores.flat()
+                const stackedTensor = new ort.Tensor('float32', flatAnnoScores, [conf.annoInputs.length, end - start])
+                const annoFeeds = { motif_scores: stackedTensor } // motif_scores is input label for max_index.onnx
+                const { max_values, max_indices, max_all } = await annoSession.run(annoFeeds)
+                const maxValues = max_values.cpuData
+                const maxIndices = max_indices.cpuData
+                const maxAll = max_all.cpuData[0]
+
+                const { tooltips, annocolors } = annoSetup(start, end, data.strand, maxIndices, maxValues, maxAll, conf.motifColorsHSL, conf.scaledThreshold, conf.motifNames)
+
+
+                self.postMessage({ type: "inference_done", sequence, results, tooltips, annocolors, requestId })
+            }
+
         }
     } catch (error) {
         self.postMessage({ type: "error", error: error.message })
@@ -100,9 +159,13 @@ const encodeSequence = (inputSequence) => {
     const seqEncoded = Array.from(inputSequence).map((char) => {
         switch (char) {
             case 'A': return [1, 0, 0, 0]
+            case 'a': return [1, 0, 0, 0]
             case 'C': return [0, 1, 0, 0]
+            case 'c': return [0, 1, 0, 0]
             case 'G': return [0, 0, 1, 0]
+            case 'g': return [0, 0, 1, 0]
             case 'T': return [0, 0, 0, 1]
+            case 't': return [0, 0, 0, 1]
             default: return [0, 0, 0, 0]
         }
     })

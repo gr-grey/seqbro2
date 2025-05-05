@@ -6,6 +6,8 @@ import inferenceWorker from "./inferenceWorker?worker"
 
 import Tippy from '@tippyjs/react';
 
+// import useDebounce from "./useDebounce"
+
 export default function EachMotif() {
 
     // State initialization from URL parameters
@@ -13,6 +15,7 @@ export default function EachMotif() {
     const [genome, setGenome] = useState(() => searchParams.get('g') || "hg38")
     const [chromosome, setChromosome] = useState(() => searchParams.get('c') || "chr7")
     const [model, setModel] = useState(() => searchParams.get('m') || "motif_line")
+
 
     const [centerCoordinate, setCenterCoordinate] = useState(() => {
         const pos = searchParams.get('pos')
@@ -35,7 +38,8 @@ export default function EachMotif() {
     const configs = useRef(null)
     const [isConfigsLoad, setIsConfigsLoaded] = useState(false)
     const [isWorkerInited, setIsWorkerInited] = useState(false)
-    const [isContentReady, setIsContentReady] = useState(false)
+    const [isInferenceReady, setIsInferenceReady] = useState(false)
+    const [isSeqEdited, setIsSeqEdited] = useState(false)
 
     const infWorker = useRef(null)
     const pendingInference = useRef(new Map())
@@ -59,6 +63,23 @@ export default function EachMotif() {
     const oneRowRef = useRef(null)
     const motifsRef = useRef(null)
     const scrollingBox = useRef('motifs')
+
+    // sequence editing
+    // const [editedJob, setEditedJob] = useState(false)
+    const editedSeq = useRef(null)
+    const seqMinLength = useRef(0)
+    const [seqError, setSeqError] = useState(false)
+    const seqWarnMessage = useRef('Invalid sequence')
+
+    // const jobRunningMessage = 
+    const [isJobRunning, setIsJobRunning] = useState(false)
+
+    const [seqVersion, setSeqVersion] = useState(0)
+
+    const runSeqRef = useRef(null)
+
+    // record scrollLeft value and recover after new inference
+    const scrollPosition = useRef(null)
 
     // URL update effect
     useEffect(() => {
@@ -100,7 +121,6 @@ export default function EachMotif() {
         timerId = window.setTimeout(() => {
             window.removeEventListener('message', onMessage)
             setNeedData(true)
-            // console.log('need data from itself')
         }, 100)
 
         // cleanup
@@ -121,13 +141,15 @@ export default function EachMotif() {
     useEffect(() => {
         if (isConfigsLoad) {
             initWorker(infWorker, pendingInference, setIsWorkerInited, configs)
+            seqMinLength.current = configs.current.convOffset * 2
+            seqWarnMessage.current = `Invalid sequence! Seq min length: ${configs.current.convOffset * 2 + 1}, and must contain only acgtACGT`
         }
     }, [isConfigsLoad])
 
     // run inference and display results
     useEffect(() => {
         const setContent = async () => {
-            setIsContentReady(false)
+            setIsInferenceReady(false)
             // infWorker fetch sequence and run inference, note that inf result is shorter than sequence input
             const start = centerCoordinate - seqHalfLen
             const end = centerCoordinate + seqHalfLen
@@ -149,7 +171,16 @@ export default function EachMotif() {
             logoRows.current = keptIndices.map(idx => `motif${idx + 1}`)
 
 
-            setIsContentReady(true)
+            setIsInferenceReady(true)
+
+            // scroll seqbox to half way
+            requestAnimationFrame(() => {
+                const elem = oneRowRef.current
+                if (elem) {
+                    const scrollRange = elem.scrollWidth - elem.clientWidth
+                    elem.scrollLeft = 0.5 * scrollRange
+                }
+            })
 
         }
         if (isWorkerInited) {
@@ -158,6 +189,8 @@ export default function EachMotif() {
     }, [isWorkerInited, genome, chromosome, centerCoordinate, strand])
 
     const handleMotifScroll = () => {
+        if (!scrollingBox.current) return
+        
         if (scrollingBox.current === 'motifs') {
             const scrollLeft = motifsRef.current.scrollLeft
             oneRowRef.current.scrollLeft = scrollLeft
@@ -165,6 +198,9 @@ export default function EachMotif() {
     }
 
     const handleOneRowScroll = () => {
+
+        if (!motifsRef.current) return
+
         if (scrollingBox.current === 'onerow') {
             const scrollLeft = oneRowRef.current.scrollLeft
             motifsRef.current.scrollLeft = scrollLeft
@@ -190,35 +226,6 @@ export default function EachMotif() {
             setSelectedLogo(src)
         }
     }
-
-    // const onMouseDown = e => {
-    //     const img = logoRef.current
-    //     if (!img) return
-
-    //     // prevent browser’s own drag preview
-    //     img.draggable = false
-
-    //     // figure out where inside the image you clicked
-    //     const rect = img.getBoundingClientRect()
-    //     const shiftX = e.clientX - rect.left
-    //     const shiftY = e.clientY - rect.top
-
-    //     // move function
-    //     const moveAt = e => {
-    //         img.style.left = e.clientX - shiftX + 'px'
-    //         img.style.top = e.clientY - shiftY + 'px'
-    //     }
-
-    //     // start listening
-    //     document.addEventListener('mousemove', moveAt)
-    //     document.addEventListener(
-    //         'mouseup',
-    //         () => { document.removeEventListener('mousemove', moveAt) },
-    //         { once: true }
-    //     )
-
-    //     e.preventDefault()
-    // }
 
     const onMouseDown = e => {
         const el = logoRef.current;
@@ -260,30 +267,149 @@ export default function EachMotif() {
         e.preventDefault();
     };
 
+    const isValidDNA = (str, len) => {
+        if (str.length <= len) return false
+
+        const dnaRegex = /^[ACGT]+$/i
+        return dnaRegex.test(str)
+
+    }
+
+    const updateTimeout = useRef(null); // To track when scrolling stops
+    function handleOneRowInput(e) {
+        // pull out the *plain text* (no HTML) that the user just edited
+
+        clearTimeout(updateTimeout.current);
+
+        updateTimeout.current = setTimeout(() => {
+            const txt = oneRowRef.current.textContent || '';
+
+            const valid = isValidDNA(txt, seqMinLength.current)
+
+            if (valid) {
+                editedSeq.current = txt
+                setSeqError(false)
+
+                scrollPosition.current = oneRowRef.current.scrollLeft
+
+                requestAnimationFrame(() => {
+                    setIsJobRunning(true)
+                    setIsInferenceReady(false)
+
+                    requestAnimationFrame(() => {
+                        // scroll temp seq to keep the same position
+                        if (runSeqRef.current) {
+                            runSeqRef.current.scrollLeft = scrollPosition.current
+                        }
+                    })
+                })
+
+            } else {
+                setSeqError(true)
+            }
+
+        }, 800)
+
+    }
+
+    // run current sequence 
+    useEffect(() => {
+
+        const runSequenceInf = async () => {
+            setIsInferenceReady(false)
+            // infWorker fetch sequence and run inference, note that inf result is shorter than sequence input
+            const start = 0
+            const end = editedSeq.current.length - 2 * configs.current.convOffset
+            const strand = '+' // coord from left to right
+            const { sequence, results, tooltips, annocolors } = await workerSeqInference(editedSeq.current, start, end, strand, isWorkerInited, infWorker, pendingInference, configs)
+
+            // console.log(results)
+            seqOneRow.current = sequence
+            colorOneRow.current = annocolors
+            tooltipsOneRow.current = tooltips
+
+            const { cpuData, dims } = results.scaled_matrix;      // Float32Array and [243, 3000]
+            const threshold = 0.05;                               // or pull from configs
+            const { keptIndices, maskedSeqs, hslMatrix, tooltipsMat } = filterAndMaskMotifs(start, end, sequence, cpuData, dims, threshold, configs)
+
+            colorMatrix.current = hslMatrix
+            tooltipsMatrix.current = tooltipsMat
+            seqRows.current = maskedSeqs
+
+            nameRows.current = keptIndices.map(idx => configs.current.motifNames[idx])
+            logoRows.current = keptIndices.map(idx => `motif${idx + 1}`)
+
+
+            requestAnimationFrame(() => {
+                setIsInferenceReady(true)
+                setSeqVersion(seqVersion + 1)
+                setIsJobRunning(false)
+
+                // recover scrolling position
+
+                requestAnimationFrame(() => { oneRowRef.current.scrollLeft = scrollPosition.current })
+            })
+
+        }
+
+        if (isJobRunning) {
+            runSequenceInf()
+        }
+
+    }, [isJobRunning])
+
+
     return (
         <div style={{ padding: 20 }}>
 
             {/* effect of all motifs in one row */}
             <div className='mt-2 sticky top-2 z-10 bg-white'>
                 <GenomeForm {...genomeFormVars} />
-                <div
-                    ref={oneRowRef}
-                    onScroll={handleOneRowScroll}
-                    onMouseEnter={handleMouseEnterOneRow}
-                    className='oneRowMotifs mt-5 overflow-x-auto font-mono whitespace-nowrap'
-                >
-                    {isContentReady && seqOneRow.current.split("").map((char, index) => (
-                        <Tippy content={tooltipsOneRow.current[index]} key={index}>
-                            <span style={{ backgroundColor: colorOneRow.current[index], display: 'inline-block', width: 10 }}>{char}</span>
-                        </Tippy>
-                    ))}
-                </div>
+                {!isJobRunning &&
+                    <div
+                        key={seqVersion} // force wipe and repaint when running new inference
+                        ref={oneRowRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={handleOneRowInput}
+                        onMouseEnter={handleMouseEnterOneRow}
+                        onScroll={handleOneRowScroll}
+                        className="oneRowMotifs mt-5 overflow-x-auto font-mono whitespace-nowrap"
+                        style={{ whiteSpace: 'nowrap' /* ensure one line */ }}
+                    >
+                        {isInferenceReady &&
+                            seqOneRow.current.split('').map((char, index) => (
+
+                                <Tippy content={tooltipsOneRow.current[index]} key={index}>
+                                    <span style={{ backgroundColor: colorOneRow.current[index], display: 'inline' }}>{char}</span>
+                                </Tippy>
+
+                            ))
+                        }
+                    </div>
+                }
+
+                {isJobRunning &&
+                    <div ref={runSeqRef} className="mt-5 overflow-x-auto font-mono whitespace-nowrap">
+                        {editedSeq.current}
+                    </div>
+                }
+
+
+
             </div>
+
+            <div className='text-red-500'>
+                {seqError && seqWarnMessage.current}
+            </div>
+
+            <div className='text-blue-500'>
+                {isJobRunning && 'Running inference on sequence.....'}
+            </div>
+
+
             {isOpenedByURL ? (
-                isContentReady ?
-
-
-
+                isInferenceReady ?
                     <div className='relative'>
 
                         {/* Each motif sequence individually */}
@@ -312,8 +438,7 @@ export default function EachMotif() {
                                             <span key={index}
                                                 style={{
                                                     backgroundColor: colorMatrix.current[i][index],
-                                                    display: 'inline-block',
-                                                    width: 10,
+                                                    display: 'inline',
                                                 }}
                                                 title={tooltipsMatrix.current[i][index]}
                                             >
@@ -365,7 +490,32 @@ export default function EachMotif() {
                     <pre>{data.annotation}</pre>
                 </>
             )}
+
+
         </div>
+    )
+
+    //
+    return (
+        <div>
+            <div
+                ref={oneRowRef}
+                onScroll={handleOneRowScroll}
+                onMouseEnter={handleMouseEnterOneRow}
+                className='oneRowMotifs mt-5 overflow-x-auto font-mono whitespace-nowrap'
+                contenteditable="true"
+            >
+                {isContentReady && seqOneRow.current.split("").map((char, index) => (
+                    <Tippy content={tooltipsOneRow.current[index]} key={index}>
+                        <span style={{ backgroundColor: colorOneRow.current[index], display: 'inline-block', width: 10 }}>{char}</span>
+                    </Tippy>
+                ))}
+            </div>
+
+
+
+        </div>
+
     )
 }
 
@@ -454,6 +604,28 @@ const workerInference = (start, end, genome, chromosome, strand, isWorkerInited,
         infWorker.current.postMessage({
             type: "runInference",
             data: { start, end, genome, chromosome, strand, configs },
+            requestId
+        });
+
+    });
+};
+
+// sequence only
+const workerSeqInference = (sequence, start, end, strand, isWorkerInited, infWorker, pendingInference, configs) => {
+
+    if (!isWorkerInited) {
+        return Promise.reject("Inference infWorker not ready");
+    }
+
+    return new Promise((resolve, reject) => {
+        const requestId = crypto.randomUUID(); // Unique ID for this request
+        // Store resolve function so it can be called when inference is done
+        pendingInference.current.set(requestId, resolve);
+
+        // Send message to infWorker with requestId
+        infWorker.current.postMessage({
+            type: "seqInference",
+            data: { sequence, start, end, strand, configs },
             requestId
         });
 
