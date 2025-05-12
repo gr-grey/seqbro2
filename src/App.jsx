@@ -32,9 +32,10 @@ function App() {
 
   const boxSeqHalfLen = 1500
   const boxSeqLen = boxSeqHalfLen * 2
-  const plotStartCoord = useRef(null)
-  const plotEndCoord = useRef(null)
+  const allStartCoord = useRef(null)
+  const allEndCoord = useRef(null)
 
+  // coords within the 3 chunk sequence window
   const seqStartCoord = useRef(null)
   const seqEndCoord = useRef(null)
 
@@ -86,29 +87,11 @@ function App() {
   const plotScrollToSeqScrollOffset = useRef(null) // plot area has more bases, so seq box need to scroll extra lengths to match the middle coordinate
   const seqScrollToPlotScrollOffset = useRef(null)
 
-  // static marks for seqbox, since there's always only 3 chunks
-  const seqBoxUpdateLeft = useRef(seqBoxPxPerBase * boxSeqLen) // seq box scroll width, end of first chunk
-  const seqBoxUpdateRight = useRef(seqBoxPxPerBase * boxSeqLen * 2) // seq box scroll width x2, end of second chunk, a bit more
-
-  // moving marks, these are inside plot box
-  const seqBoxLeftTriggerPoint = useRef(null) // starting position that matches the seq box
-  const seqBoxRightTriggerPoint = useRef(null)
-
-  const plotClosetestLeftScrollPoint = useRef(null)
   const boxCenterChunkId = useRef(initMiddleIdx)
-
-  // place holder for retrieving new sequences
-  const seqChunkFiller = 'X'.repeat(boxSeqLen)
-  const tooltipsChunkFiller = new Array(boxSeqLen).fill('0')
-  const annoChunkFiller = new Array(boxSeqLen).fill('white')
 
   // scrollWidth - clientWidth
   const seqBoxAvailableScroll = useRef(null)
   const plotBoxAvailableScroll = useRef(null)
-
-  // scroll buffers to this position to be ready for swapping, need to change with windowsize
-  const leftUpdateTriggerPoint = useRef(null)
-  const rightUpdateTriggerPoint = useRef(initPlotNum)
 
   // track scrolling
   const isInitedScrolled = useRef(false)
@@ -122,13 +105,19 @@ function App() {
   // set scrollingBox based on where the mouse is
   const handleMouseEnterSeqBox = () => { scrollBox.current = 'seqBox' }
   const handleMouseLeaveSeqBox = () => { scrollBox.current = 'plotBox' }
-  // const handleMouseEnterPlotBox = () => { scrollBox.current = 'plotBox' }
 
-  // coodinate ruler
+  // coordinate ruler
   const [plotCoords, setPlotCoords] = useState([0, 0, 0])
   const [seqCoords, setSeqCoords] = useState([0, 0, 0])
 
-  const [showEachMotif, setShowEachMotif] = useState(false)
+
+  // both seq and plot fixed at 3 chunks
+  const leftTriggerPoint = useRef(null) // at the end of first chunk
+  const rightTriggerPoint = useRef(null) // at the end of second chunk
+
+  const plotBoxScrollLeft = useRef(null)
+
+  // const [showEachMotif, setShowEachMotif] = useState(false)
 
   // URL update effect
   useEffect(() => {
@@ -148,9 +137,7 @@ function App() {
 
   // load configs
   useEffect(() => {
-
     loadConfigFile(`/${model}.config.json`, configs, setIsConfigsLoaded)
-
   }, [model])
 
   // init infWorker
@@ -164,8 +151,8 @@ function App() {
       const plotPxPerBP = Math.max(Math.ceil(boxWidth / 500), 3) * 0.5
       const plotScrollWidth = plotPxPerBP * boxSeqLen
       plotBoxScrollWidth.current = plotScrollWidth
-      plotBoxAvailableScroll.current = plotScrollWidth - boxWidth
-      seqBoxAvailableScroll.current = seqBoxScrollWidth.current * 3 - boxWidth
+      plotBoxAvailableScroll.current = plotScrollWidth * initPlotNum - boxWidth
+      seqBoxAvailableScroll.current = seqBoxScrollWidth.current * initPlotNum - boxWidth
       plotBoxPxPerBase.current = plotPxPerBP
 
       seqBoxViewHalfLen.current = boxWidth / seqBoxPxPerBase / 2
@@ -177,59 +164,50 @@ function App() {
 
       seqScrollToPlotScrollOffset.current = (boxWidth / seqBoxPxPerBase - boxWidth / plotPxPerBP) / 2 * plotPxPerBP
 
-      seqBoxLeftTriggerPoint.current = initMiddleIdx * plotScrollWidth // 1 * 4500 at beginning
-      seqBoxRightTriggerPoint.current = (initPlotNum - 1) * plotScrollWidth
-      // seqBoxRightTriggerPoint.current = (initPlotNum - 2) * plotScrollWidth + plotBoxAvailableScroll.current
-      plotClosetestLeftScrollPoint.current = initMiddleIdx * plotScrollWidth
+      // trigger points are based on plot scroll position, as seq box is way wider than plot
+      leftTriggerPoint.current = plotScrollWidth - boxWidth
+      rightTriggerPoint.current = plotScrollWidth * 2
 
-      // right trigger point
-      rightUpdateTriggerPoint.current = (initPlotNum - 1) * plotScrollWidth// when reach the last part of the second but last plot
     }
   }, [isConfigsLoad])
 
   // init sequence, inference, and set plot
   const initPlot = async () => {
     setIsFirstChunkInited(false)
-    seqList.current = new Array(initPlotNum).fill(seqChunkFiller)
-    tooltipsList.current = new Array(initPlotNum).fill(tooltipsChunkFiller)
-    annoList.current = new Array(initPlotNum).fill(annoChunkFiller)
-
-    plotDataList.current = new Array(initPlotNum).fill(null)
-    plotLayoutList.current = new Array(initPlotNum).fill(null)
     isInitedScrolled.current = false
 
     const start = centerCoordinate - boxSeqHalfLen
     const end = centerCoordinate + boxSeqHalfLen
-    plotStartCoord.current = start
-    plotEndCoord.current = end
+    allStartCoord.current = start
+    allEndCoord.current = end
 
     // seqbox start and end coords with full coord
-    seqStartCoord.current = centerCoordinate - 3 * boxSeqHalfLen // seq box only spans 3 chunks
-    seqEndCoord.current = centerCoordinate + 3 * boxSeqHalfLen
+    seqStartCoord.current = centerCoordinate - initPlotNum * boxSeqHalfLen // seq box only spans 3 chunks
+    seqEndCoord.current = centerCoordinate + initPlotNum * boxSeqHalfLen
 
 
     const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin)
 
-    seqList.current[initMiddleIdx] = sequence
-    tooltipsList.current[initMiddleIdx] = tooltips
-    annoList.current[initMiddleIdx] = annocolors
+    seqList.current = [sequence]
+    tooltipsList.current = [tooltips]
+    annoList.current = [annocolors]
 
-    plotDataList.current[initMiddleIdx] = plotData
-    plotLayoutList.current[initMiddleIdx] = plotLayout
-    setItems(range(0, initPlotNum))
+    plotDataList.current = [plotData]
+    plotLayoutList.current = [plotLayout]
+    setItems([0])
 
     requestAnimationFrame(() => {
       setIsFirstChunkInited(true)
-      setSeq(seqList.current.join(""))
-      setTooltips(tooltipsList.current.flat())
-      setAnnoColors(annoList.current.flat())
+      setSeq(sequence)
+      setTooltips(tooltips)
+      setAnnoColors(annocolors)
     })
 
     // scroll things to middle
     setTimeout(() => {
-      seqbox.current.scrollLeft = seqBoxAvailableScroll.current * 0.5
-      plotbox.current.scrollToItem(initMiddleIdx, 'center')
-      isInitedScrolled.current = true
+      seqbox.current.scrollLeft = Math.round((seqBoxScrollWidth.current - boxWindowWidth.current) * 0.5)
+      plotbox.current.scrollTo(Math.round((plotBoxScrollWidth.current - boxWindowWidth.current) * 0.5))
+      // isInitedScrolled.current = true
     }, 10)
   }
 
@@ -239,15 +217,33 @@ function App() {
   }, [isWorkerInited, genome, chromosome, centerCoordinate, strand])
 
   const initSideChunks = async () => {
-    await extendFixedLists('left', strand, false)
-    await extendFixedLists('right', strand, false)
-    setSeq(seqList.current.join(""))
-    setTooltips(tooltipsList.current.flat())
-    setAnnoColors(annoList.current.flat())
+    await updateLists('left', strand)
+    await updateLists('right', strand)
+
+    // start shifting chunks
+    isTransitioning.current = true
+    isInitedScrolled.current = false
+
+    const centerChunk = Math.floor(initPlotNum / 2)
+    setSeq([seqList.current[centerChunk - 1], seqList.current[centerChunk], seqList.current[centerChunk + 1]].join(""))
+    setAnnoColors([annoList.current[centerChunk - 1], annoList.current[centerChunk], annoList.current[centerChunk + 1]].flat())
+    setTooltips([tooltipsList.current[centerChunk - 1], tooltipsList.current[centerChunk], tooltipsList.current[centerChunk + 1]].flat())
+    setItems([centerChunk - 1, centerChunk, centerChunk + 1])
+
+    plotbox.current.scrollTo(plotBoxAvailableScroll.current / 2)
+    
+    requestAnimationFrame(() => {
+      seqbox.current.scrollLeft =  seqBoxAvailableScroll.current / 2
+      isInitedScrolled.current = true
+      isTransitioning.current = false
+      
+    })
   }
   // load the other two chunks once the middle chunk is loaded
   useEffect(() => {
-    if (isFirstChunkInited) { initSideChunks() }
+    if (isFirstChunkInited) {
+       initSideChunks() 
+      }
   }, [isFirstChunkInited])
 
   const scrollTimeout = useRef(null); // To track when scrolling stops
@@ -256,145 +252,173 @@ function App() {
 
     if (strand === '+') {
       const leftCoord = startCoord + scrollLeft / pxPerBase
-      const coords = [Math.floor(leftCoord), Math.floor(leftCoord + baseHalfLen), Math.floor(leftCoord + 2 * baseHalfLen)]
+      const coords = [Math.round(leftCoord), Math.round(leftCoord + baseHalfLen), Math.round(leftCoord + 2 * baseHalfLen)]
       return coords
     } else {
       const leftCoord = endCoord - scrollLeft / pxPerBase
-      const coords = [Math.floor(leftCoord), Math.floor(leftCoord - baseHalfLen), Math.floor(leftCoord - 2 * baseHalfLen)]
+      const coords = [Math.round(leftCoord), Math.round(leftCoord - baseHalfLen), Math.round(leftCoord - 2 * baseHalfLen)]
       return coords
     }
   }
 
-  const handleSeqBoxScroll = () => {
-    if (isTransitioning.current || !isInitedScrolled.current || scrollBox.current === 'plotBox') return;
+  const convertScrollLeft = (sourceScrollLeft, sourceMidScrollPoint, targetMidScrollPoint, targetToSourceScrollRatio) => {
+    return targetToSourceScrollRatio * (sourceScrollLeft - sourceMidScrollPoint) + targetMidScrollPoint
+  }
 
-    const scrollLeft = seqbox.current.scrollLeft
-
-    if (scrollLeft < seqBoxUpdateLeft.current) {
-      isTransitioning.current = true
-
-      if (boxCenterChunkId.current === 1) {
-        // need to fetch new chunks
-
-        // pad Xs for sequence
-        setSeq([seqChunkFiller, seqList.current[0], seqList.current[1]].join(""))
-        setAnnoColors([annoChunkFiller, annoList.current[0], annoList.current[1]].flat())
-        setTooltips([tooltipsChunkFiller, tooltipsList.current[0], tooltipsList.current[1]].flat())
-
-        // update scrolling
-        seqbox.current.scrollLeft += seqBoxScrollWidth.current
-
-        // left edge, avoid upating lists at the sametime
-        // add a null chunk and update items
-        plotDataList.current = [null, ...plotDataList.current]
-        plotLayoutList.current = [null, ...plotLayoutList.current]
-        setItems((prev) => [prev[0] - 1, ...prev])
-
-        seqList.current = [null, ...seqList.current]
-        tooltipsList.current = [null, ...tooltipsList.current]
-        annoList.current = [null, ...annoList.current]
-
-        extendFixedLists('left', strand, true)
-        rightUpdateTriggerPoint.current += plotBoxScrollWidth.current // move the trigger point further down
-
-      } else {
-        // only shift to left
-        console.log('only shift to left')
-
-        const cen = boxCenterChunkId.current // shift to the left
-        setSeq([seqList.current[cen - 2], seqList.current[cen - 1], seqList.current[cen]].join(""))
-        setAnnoColors([annoList.current[cen - 2], annoList.current[cen - 1], annoList.current[cen]].flat())
-        setTooltips([tooltipsList.current[cen - 2], tooltipsList.current[cen - 1], tooltipsList.current[cen]].flat())
-
-        seqbox.current.scrollLeft += seqBoxScrollWidth.current
-
-        boxCenterChunkId.current -= 1
-        seqBoxLeftTriggerPoint.current -= plotBoxScrollWidth.current
-        seqBoxRightTriggerPoint.current -= plotBoxScrollWidth.current
-      }
-
-      // update seq coords no matter fetch or not
-      updateSeqCoords(strand, 'left', seqStartCoord, seqEndCoord, boxSeqLen)
-      requestAnimationFrame(() => {
-        isTransitioning.current = false
-      })
-
-    } else if (scrollLeft > seqBoxUpdateRight.current) {
-
-      isTransitioning.current = true
-
-      if (boxCenterChunkId.current === items.length - 2) {
-        console.log('update and fetch on right')
-
-        const lastIdx = seqList.current.length - 1
-        setSeq([seqList.current[lastIdx - 1], seqList.current[lastIdx], seqChunkFiller].join(""))
-        setAnnoColors([annoList.current[lastIdx - 1], annoList.current[lastIdx], annoChunkFiller].flat())
-        setTooltips([tooltipsList.current[lastIdx - 1], tooltipsList.current[lastIdx], tooltipsChunkFiller].flat())
-
-        // update scrolling
-        seqbox.current.scrollLeft -= seqBoxScrollWidth.current
-
-        // add a null chunk at the end and update items
-        plotDataList.current = [...plotDataList.current, null]
-        plotLayoutList.current = [...plotLayoutList.current, null]
-
-        seqList.current = [...seqList.current, null]
-        tooltipsList.current = [...tooltipsList.current, null]
-        annoList.current = [...annoList.current, null]
-        setItems((prev) => [...prev, prev[items.length - 1] + 1])
-        extendFixedLists('right', strand, true)
-
-        rightUpdateTriggerPoint.current += plotBoxScrollWidth.current // move the trigger point further down
-        // seqBox shift left
-        seqBoxRightTriggerPoint.current += plotBoxScrollWidth.current
-        seqBoxLeftTriggerPoint.current += plotBoxScrollWidth.current
-
-        boxCenterChunkId.current += 1
-      } else {
-        // only swap seq, no update 
-        // console.log('only swap seq on the right')
-
-        const cen = boxCenterChunkId.current // shift to the left
-        setSeq([seqList.current[cen], seqList.current[cen + 1], seqList.current[cen + 2]].join(""))
-        setAnnoColors([annoList.current[cen], annoList.current[cen + 1], annoList.current[cen + 2]].flat())
-        setTooltips([tooltipsList.current[cen], tooltipsList.current[cen + 1], tooltipsList.current[cen + 2]].flat())
-
-        boxCenterChunkId.current += 1
-        seqBoxLeftTriggerPoint.current += plotBoxScrollWidth.current
-        seqBoxRightTriggerPoint.current += plotBoxScrollWidth.current
-
-        // update scrolling
-        seqbox.current.scrollLeft -= seqBoxScrollWidth.current
-      }
-
-      // update seq coords no matter fetch or not
-      updateSeqCoords(strand, 'right', seqStartCoord, seqEndCoord, boxSeqLen)
-      requestAnimationFrame(() => {
-        isTransitioning.current = false
-      })
-
+  // get a new chunk and add to lists
+  const updateLists = async (direction, strand) => {
+    isUpdatingLists.current = true
+    let newStart, newEnd
+    if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
+      // need data for smaller coords
+      newEnd = allStartCoord.current
+      newStart = newEnd - boxSeqLen
+      allStartCoord.current = newStart // update start
+    } else {
+      newStart = allEndCoord.current
+      newEnd = newStart + boxSeqLen
+      allEndCoord.current = newEnd // update end
     }
 
-    else {
+    const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(newStart, newEnd, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin)
 
-      const plotPos = seqScrollToPlotScrollOffset.current + (scrollLeft - seqBoxScrollWidth.current) / seqBoxPxPerBase * plotBoxPxPerBase.current + boxCenterChunkId.current * plotBoxScrollWidth.current
-
-      plotbox.current.scrollTo(Math.round(plotPos))
-
-      // Detect when scrolling stops
-      clearTimeout(scrollTimeout.current);
-      scrollTimeout.current = setTimeout(() => {
-        const seqCoords = getCoords(strand, seqStartCoord.current, seqEndCoord.current, scrollLeft, 10, seqBoxViewHalfLen.current)
-        setSeqCoords(seqCoords)
-        const plotCoords = strand === '+' ? [seqCoords[1] - plotBoxViewHalfLen.current, seqCoords[1], seqCoords[1] + plotBoxViewHalfLen.current] : [seqCoords[1] + plotBoxViewHalfLen.current, seqCoords[1], seqCoords[1] - plotBoxViewHalfLen.current]
-        setPlotCoords(plotCoords)
-      }, 150)
+    // prepend or append according to directions
+    if (direction === 'left') {
+      // prepend
+      seqList.current.unshift(sequence)
+      tooltipsList.current.unshift(tooltips)
+      annoList.current.unshift(annocolors)
+      plotDataList.current.unshift(plotData)
+      plotLayoutList.current.unshift(plotLayout)
+    } else {
+      seqList.current.push(sequence)
+      tooltipsList.current.push(tooltips)
+      annoList.current.push(annocolors)
+      plotDataList.current.push(plotData)
+      plotLayoutList.current.push(plotLayout)
     }
 
+    requestAnimationFrame(() => {
+      isUpdatingLists.current = false
+    })
 
   }
 
-  // throttle(, 5)
+  // shift for both plot and seq
+  const shiftChunks = (centerChunk, direction) => {
+    setSeq([seqList.current[centerChunk - 1], seqList.current[centerChunk], seqList.current[centerChunk + 1]].join(""))
+    setAnnoColors([annoList.current[centerChunk - 1], annoList.current[centerChunk], annoList.current[centerChunk + 1]].flat())
+    setTooltips([tooltipsList.current[centerChunk - 1], tooltipsList.current[centerChunk], tooltipsList.current[centerChunk + 1]].flat())
+    setItems([centerChunk - 1, centerChunk, centerChunk + 1])
+
+    if (direction === 'left') {
+      seqbox.current.scrollLeft += seqBoxScrollWidth.current
+      plotbox.current.scrollTo(plotBoxScrollLeft.current + plotBoxScrollWidth.current)
+    } else if (direction === 'right') { // right direction
+      seqbox.current.scrollLeft -= seqBoxScrollWidth.current
+      plotbox.current.scrollTo(plotBoxScrollLeft.current - plotBoxScrollWidth.current)
+    }
+  }
+
+  const scrollUpdate = async (direction, strand, update) => {
+
+    let centerId
+    if (update) { await updateLists(direction, strand) }
+
+    // start shifting chunks
+    isTransitioning.current = true
+
+    if (direction === 'left' && update) {
+      centerId = boxCenterChunkId.current // this value should be 1
+    } else if (direction === 'left') {
+      centerId = boxCenterChunkId.current - 1 // left and not updating
+    }
+    else {
+      centerId = boxCenterChunkId.current + 1 // always add one if direction is right
+    }
+
+    shiftChunks(centerId, direction)
+
+    requestAnimationFrame(() => {
+      isTransitioning.current = false
+      boxCenterChunkId.current = centerId
+      // update seq coords no matter fetch or not
+      updateSeqCoords(strand, direction, seqStartCoord, seqEndCoord, boxSeqLen)
+    })
+  }
+
+  const handlePlotBoxScrollNew = ({ scrollOffset }) => {
+    
+    if (scrollBox.current === 'seqBox' || isTransitioning.current || !isInitedScrolled.current) return
+    plotBoxScrollLeft.current = scrollOffset
+
+    const seqScrollLeft = convertScrollLeft(scrollOffset, plotBoxAvailableScroll.current / 2, seqBoxAvailableScroll.current / 2, seqBoxPxPerBase / plotBoxPxPerBase.current)
+
+    seqbox.current.scrollLeft = seqScrollLeft
+
+    if (scrollOffset < leftTriggerPoint.current && !isUpdatingLists.current) {
+      if (boxCenterChunkId.current === 1) {
+        scrollUpdate('left', strand, true)
+      } else {
+        scrollUpdate('left', strand, false)
+      }
+    } else if (scrollOffset > rightTriggerPoint.current && !isUpdatingLists.current) {
+      if (boxCenterChunkId.current === seqList.current.length - 2) {
+        scrollUpdate('right', strand, true)
+      } else {
+        scrollUpdate('right', strand, false)
+      }
+    } else {
+      // Detect when scrolling stops
+      clearTimeout(scrollTimeout.current);
+      scrollTimeout.current = setTimeout(() => {
+
+        const seqCoords = getCoords(strand, seqStartCoord.current, seqEndCoord.current, seqScrollLeft, seqBoxPxPerBase, seqBoxViewHalfLen.current)
+        const plotCoords = strand === '+' ?
+        [seqCoords[1] - plotBoxViewHalfLen.current, seqCoords[1], seqCoords[1] + plotBoxViewHalfLen.current]
+        : [seqCoords[1] + plotBoxViewHalfLen.current, seqCoords[1], seqCoords[1] - plotBoxViewHalfLen.current]
+        setSeqCoords(seqCoords)
+        setPlotCoords(plotCoords)
+      }, 300); // Slightly longer delay to catch the stop
+    }
+  }
+
+  const handleSeqBoxScrollNew = () => {
+    if (scrollBox.current === 'plotBox' || isTransitioning.current || !isInitedScrolled.current) return
+
+    // syncing scrolls
+    const seqScrollLeft = seqbox.current.scrollLeft
+    const plotScrollLeft = convertScrollLeft(seqScrollLeft, seqBoxAvailableScroll.current / 2, plotBoxAvailableScroll.current / 2, plotBoxPxPerBase.current / seqBoxPxPerBase)
+
+    plotbox.current.scrollTo(Math.round(plotScrollLeft))
+
+    // handling chunks updates
+    if (plotScrollLeft < leftTriggerPoint.current && !isUpdatingLists.current) {
+      if (boxCenterChunkId.current === 1) {
+        scrollUpdate('left', strand, true)
+      } else {
+        scrollUpdate('left', strand, false)
+      }
+    } else if (plotScrollLeft > rightTriggerPoint.current && !isUpdatingLists.current) {
+      if (boxCenterChunkId.current === seqList.current.length - 2) {
+        scrollUpdate('right', strand, true)
+      } else {
+        scrollUpdate('right', strand, false)
+      }
+    } else {
+      // Detect when scrolling stops
+      clearTimeout(scrollTimeout.current);
+      scrollTimeout.current = setTimeout(() => {
+
+        const seqCoords = getCoords(strand, seqStartCoord.current, seqEndCoord.current, seqScrollLeft, seqBoxPxPerBase, seqBoxViewHalfLen.current)
+        const plotCoords = strand === '+' ?
+        [seqCoords[1] - plotBoxViewHalfLen.current, seqCoords[1], seqCoords[1] + plotBoxViewHalfLen.current]
+        : [seqCoords[1] + plotBoxViewHalfLen.current, seqCoords[1], seqCoords[1] - plotBoxViewHalfLen.current]
+        setSeqCoords(seqCoords)
+        setPlotCoords(plotCoords)
+      }, 300); // Slightly longer delay to catch the stop
+    }
+  }
 
   const updateSeqCoords = (strand, direction, seqStartCoord, seqEndCoord, boxSeqLen) => {
     if ((strand === '+' && direction === 'left') || (strand === '-' && direction === 'right')) {
@@ -406,131 +430,17 @@ function App() {
       seqEndCoord.current += boxSeqLen
     }
   }
-  const handlePlotBoxScroll = ({ scrollOffset }) => {
-    if (isTransitioning.current || !isInitedScrolled.current || scrollBox.current === 'seqBox') return;
-
-    if (scrollOffset < seqBoxLeftTriggerPoint.current) {
-      isTransitioning.current = true
-
-      if (scrollOffset < plotBoxScrollWidth.current && !isUpdatingLists.current) {
-        // left edge, avoid upating lists at the sametime
-        // add a null chunk and update items
-        plotDataList.current = [null, ...plotDataList.current]
-        plotLayoutList.current = [null, ...plotLayoutList.current]
-        setItems((prev) => [prev[0] - 1, ...prev])
-        plotbox.current.scrollTo(scrollOffset + plotBoxScrollWidth.current)
-
-        // pad Xs for sequence
-        setSeq([seqChunkFiller, seqList.current[0], seqList.current[1]].join(""))
-        setAnnoColors([annoChunkFiller, annoList.current[0], annoList.current[1]].flat())
-        setTooltips([tooltipsChunkFiller, tooltipsList.current[0], tooltipsList.current[1]].flat())
-
-        seqList.current = [null, ...seqList.current]
-        tooltipsList.current = [null, ...tooltipsList.current]
-        annoList.current = [null, ...annoList.current]
-
-        extendFixedLists('left', strand, true)
-        rightUpdateTriggerPoint.current += plotBoxScrollWidth.current // move the trigger point further down
-
-        requestAnimationFrame(() => {
-          // shift box trackers to the left
-          isTransitioning.current = false
-        })
-      } else {
-        // only swap seq
-
-        const cen = boxCenterChunkId.current // shift to the left
-        setSeq([seqList.current[cen - 2], seqList.current[cen - 1], seqList.current[cen]].join(""))
-        setAnnoColors([annoList.current[cen - 2], annoList.current[cen - 1], annoList.current[cen]].flat())
-        setTooltips([tooltipsList.current[cen - 2], tooltipsList.current[cen - 1], tooltipsList.current[cen]].flat())
-
-        boxCenterChunkId.current -= 1
-        seqBoxLeftTriggerPoint.current -= plotBoxScrollWidth.current
-        seqBoxRightTriggerPoint.current -= plotBoxScrollWidth.current
-        requestAnimationFrame(() => {
-          isTransitioning.current = false
-        })
-      }
-      // update seq coords no matter fetch or not
-      updateSeqCoords(strand, 'left', seqStartCoord, seqEndCoord, boxSeqLen)
-    } else if (scrollOffset > seqBoxRightTriggerPoint.current) {
-
-      if (scrollOffset > rightUpdateTriggerPoint.current && !isUpdatingLists.current) {
-
-        //  right edge
-        isTransitioning.current = true
-        // add a null chunk at the end and update items
-        plotDataList.current = [...plotDataList.current, null]
-        plotLayoutList.current = [...plotLayoutList.current, null]
-
-        const lastIdx = seqList.current.length - 1
-        setSeq([seqList.current[lastIdx - 1], seqList.current[lastIdx], seqChunkFiller].join(""))
-        setAnnoColors([annoList.current[lastIdx - 1], annoList.current[lastIdx], annoChunkFiller].flat())
-        setTooltips([tooltipsList.current[lastIdx - 1], tooltipsList.current[lastIdx], tooltipsChunkFiller].flat())
-
-        seqList.current = [...seqList.current, null]
-        tooltipsList.current = [...tooltipsList.current, null]
-        annoList.current = [...annoList.current, null]
-        setItems((prev) => [...prev, prev[items.length - 1] + 1])
-        extendFixedLists('right', strand, true)
-        rightUpdateTriggerPoint.current += plotBoxScrollWidth.current // move the trigger point further down
-        // seqBox shift left
-        seqBoxRightTriggerPoint.current += plotBoxScrollWidth.current
-        seqBoxLeftTriggerPoint.current += plotBoxScrollWidth.current
-
-        boxCenterChunkId.current += 1
-
-        requestAnimationFrame(() => {
-          isTransitioning.current = false
-        })
-      } else {
-
-        // only swap seq, no update 
-        // console.log('only swap seq on the right')
-
-        const cen = boxCenterChunkId.current // shift to the left
-        setSeq([seqList.current[cen], seqList.current[cen + 1], seqList.current[cen + 2]].join(""))
-        setAnnoColors([annoList.current[cen], annoList.current[cen + 1], annoList.current[cen + 2]].flat())
-        setTooltips([tooltipsList.current[cen], tooltipsList.current[cen + 1], tooltipsList.current[cen + 2]].flat())
-
-        boxCenterChunkId.current += 1
-        seqBoxLeftTriggerPoint.current += plotBoxScrollWidth.current
-        seqBoxRightTriggerPoint.current += plotBoxScrollWidth.current
-        requestAnimationFrame(() => {
-          isTransitioning.current = false
-        })
-      }
-      // update seq coords no matter fetch or not
-      updateSeqCoords(strand, 'right', seqStartCoord, seqEndCoord, boxSeqLen)
-    }
-
-
-    const seqBoxPos = plotScrollToSeqScrollOffset.current + (scrollOffset - seqBoxLeftTriggerPoint.current) / plotBoxPxPerBase.current * seqBoxPxPerBase
-    seqbox.current.scrollLeft = Math.round(seqBoxPos)
-
-    // Detect when scrolling stops
-    clearTimeout(scrollTimeout.current);
-    scrollTimeout.current = setTimeout(() => {
-
-      const plotCoords = getCoords(strand, plotStartCoord.current, plotEndCoord.current, scrollOffset, plotBoxPxPerBase.current, plotBoxViewHalfLen.current)
-      setPlotCoords(plotCoords)
-      const seqCoords = strand === '+' ?
-        [plotCoords[1] - seqBoxViewHalfLen.current, plotCoords[1], plotCoords[1] + seqBoxViewHalfLen.current]
-        : [plotCoords[1] + seqBoxViewHalfLen.current, plotCoords[1], plotCoords[1] - seqBoxViewHalfLen.current]
-      setSeqCoords(seqCoords)
-    }, 200); // Slightly longer delay to catch the stop
-  }
-  // throttle(, 10)
 
   const PlotRow = ({ index, style }) => {
     const num = items[index];
-    if (plotDataList.current[index]) {
+    if (plotDataList.current[num]) {
+
       // Memoize the plot so it doesn't rerender unnecessarily
       return useMemo(() =>
         <div style={{ ...style }} >
           <Plot
-            data={plotDataList.current[index]}
-            layout={plotLayoutList.current[index]}
+            data={plotDataList.current[num]}
+            layout={plotLayoutList.current[num]}
             config={{
               scrollZoom: false, // Prevent pinch-to-zoom
               displayModeBar: false, // Hide extra toolbar
@@ -544,60 +454,6 @@ function App() {
     }
   }
 
-  // expand towards the start coords by a chunk
-  const extendFixedLists = async (direction, strand, updateSeq) => {
-    isUpdatingLists.current = true
-    let newStart, newEnd
-    if ((direction === 'left' && strand === '+') || (direction === 'right' && strand === '-')) {
-      // need data for smaller coords
-      newEnd = plotStartCoord.current
-      newStart = newEnd - boxSeqLen
-      plotStartCoord.current = newStart // update start
-    } else {
-      newStart = plotEndCoord.current
-      newEnd = newStart + boxSeqLen
-      plotEndCoord.current = newEnd // update end
-    }
-
-    const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(newStart, newEnd, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin)
-
-    // prepend or append according to directions
-    if (direction === 'left') {
-      seqList.current[0] = sequence
-      tooltipsList.current[0] = tooltips
-      annoList.current[0] = annocolors
-      plotDataList.current[0] = plotData
-      plotLayoutList.current[0] = plotLayout
-
-      if (updateSeq) {
-        setSeq([sequence, seqList.current[1], seqList.current[2]].join(""))
-        setTooltips([tooltips, tooltipsList.current[1], tooltipsList.current[2]].flat())
-        setAnnoColors([annocolors, annoList.current[1], annoList.current[2]].flat())
-      }
-    } else {
-      const lastIdx = plotDataList.current.length - 1
-      seqList.current[lastIdx] = sequence
-      tooltipsList.current[lastIdx] = tooltips
-      annoList.current[lastIdx] = annocolors
-      plotDataList.current[lastIdx] = plotData
-      plotLayoutList.current[lastIdx] = plotLayout
-
-      if (updateSeq) {
-        setSeq([seqList.current[lastIdx - 2], seqList.current[lastIdx - 1], sequence].join(""))
-        setTooltips([tooltipsList.current[lastIdx - 2], tooltipsList.current[lastIdx - 1], tooltips].flat())
-        setAnnoColors([annoList.current[lastIdx - 2], annoList.current[lastIdx - 1], annocolors].flat())
-      }
-    }
-
-    requestAnimationFrame(() => {
-      isUpdatingLists.current = false
-    })
-
-  }
-
-  const rows = Array.from({ length: 10 });
-
-
   const openEachMotif = () => {
     // opens a new tab at /each_motif?g=...&c=...
     const child = window.open(`/each_motif?${searchParams.toString()}`, '_blank')
@@ -610,7 +466,7 @@ function App() {
     // wait for child to say read for message sending
     const handleReady = (e) => {
       if (e.source === child && e.data === 'READY_FOR_DATA') {
-        child.postMessage({type: 'INIT_DATA', payload}, window.location.origin)
+        child.postMessage({ type: 'INIT_DATA', payload }, window.location.origin)
         window.removeEventListener('message', handleReady)
       }
     }
@@ -657,7 +513,7 @@ function App() {
           <div
             className="sequence-box bg-white border-[2px] border-dashed border-slate-500 overflow-x-auto font-mono whitespace-nowrap"
             ref={seqbox}
-            onScroll={handleSeqBoxScroll}
+            onScroll={handleSeqBoxScrollNew}
             onMouseEnter={handleMouseEnterSeqBox}
             onMouseLeave={handleMouseLeaveSeqBox}
           >
@@ -679,44 +535,8 @@ function App() {
           </div>
         </div>
 
-        {/* each motif row */}
-
-        {showEachMotif && isFirstChunkInited &&
-          <div className='relative h-[10rem] mt-2 overflow-y-auto border border-gray-500'>
-            <div className="overflow-x-auto">
-              {/* A simple vertical stack of rows */}
-              {rows.map((_, index) => (
-                <div key={index}>
-
-                  <div className='absolute left-[50%] translate-x-[-50%]'> {`motif${index + 1}`} </div>
-
-                  <div className='inline-block'> {""}</div>
-                  <div className="font-mono whitespace-nowrap">
-                    {
-                      seq.split("").map((char, index) => (
-                        <Tippy content={tooltips[index]} key={index}>
-                          <span style={{
-                            backgroundColor: annoColors[index],
-                            display: 'inline-block',
-                            width: seqBoxPxPerBase,
-                          }}>
-                            {char}
-                          </span>
-                        </Tippy>
-                      ))
-                    }
-                  </div>
-
-                </div>
-              ))}
-
-            </div>
-          </div>
-        }
-
         {/* each motif button */}
-        <button onClick={openEachMotif} className="mt-2 py-2.5 px-5 me-2 mb-2 text-sm font-medium text-gray-900 bg-white rounded-lg border border-gray-700 hover:bg-gray-100 hover:text-blue-700 focus:ring-4 focus:ring-gray-100">Each motif</button>
-
+        {/* <button onClick={openEachMotif} className="mt-2 py-2.5 px-5 me-2 mb-2 text-sm font-medium text-gray-900 bg-white rounded-lg border border-gray-700 hover:bg-gray-100 hover:text-blue-700 focus:ring-4 focus:ring-gray-100">Each motif</button> */}
 
         {/* Plot box */}
         {/* plotBox ruler */}
@@ -786,17 +606,15 @@ function App() {
                   layout="horizontal"
                   ref={plotbox}
                   height={plotHeight + plotBottomMargin}
-                  itemCount={items.length}
+                  // itemCount={items.length}
+                  itemCount={initPlotNum}
                   itemSize={plotBoxScrollWidth.current}
                   width={boxWindowWidth.current}
-                  onScroll={handlePlotBoxScroll}
+                  onScroll={handlePlotBoxScrollNew}
                 >
                   {PlotRow}
                 </List>
               </div>
-              {/* {isFirstChunkInited &&
-
-              } */}
 
             </div>
           </div>
