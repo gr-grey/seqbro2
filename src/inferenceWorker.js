@@ -85,7 +85,6 @@ self.onmessage = async (event) => {
             const offset = conf.convOffset
             const sequence = infSeq.slice(offset, -offset)
 
-
             const infThreshold = conf.threshold ? conf.threshold : null
 
             const seqEncoded = encodeSequence(infSeq)

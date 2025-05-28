@@ -7,7 +7,6 @@ import GenomeForm from './GenomeForm'
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
 import Plot from 'react-plotly.js';
-import throttle from 'lodash/throttle'
 
 function App() {
 
@@ -15,8 +14,8 @@ function App() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [genome, setGenome] = useState(() => searchParams.get('g') || "hg38")
   const [chromosome, setChromosome] = useState(() => searchParams.get('c') || "chr7")
-  // const [model, setModel] = useState(() => searchParams.get('m') || "puffin")
-  const [model, setModel] = useState(() => searchParams.get('m') || "motif")
+  const [model, setModel] = useState(() => searchParams.get('m') || "puffin")
+  // const [model, setModel] = useState(() => searchParams.get('m') || "motif")
 
   const [centerCoordinate, setCenterCoordinate] = useState(() => {
     const pos = searchParams.get('pos')
@@ -49,7 +48,6 @@ function App() {
   const annoList = useRef(null)
 
   // default tooltips: coords
-  // const [tooltips, setTooltips] = useState(strand === '+' ? range(centerCoordinate - boxSeqHalfLen, centerCoordinate + boxSeqHalfLen) : range(centerCoordinate + boxSeqHalfLen, centerCoordinate - boxSeqHalfLen, -1))
   const [tooltips, setTooltips] = useState(null)
   // default color: white
   const [annoColors, setAnnoColors] = useState(null)
@@ -77,15 +75,12 @@ function App() {
 
   // tracking sizes
   const boxWindowWidth = useRef(null) // width for both sequence and plot box
-  const seqBoxPxPerBase = 10
+  const seqBoxPxPerBase = useRef(null)
   const plotBoxPxPerBase = useRef(null) // pixel per character/ base, 1.5, 2, and so on
-  const seqBoxScrollWidth = useRef(seqBoxPxPerBase * boxSeqLen) // left, mid, right, 3 chunks only
+  const seqBoxScrollWidth = useRef(null) // left, mid, right, 3 chunks only
   const plotBoxScrollWidth = useRef(null)
   const seqBoxViewHalfLen = useRef(null)
   const plotBoxViewHalfLen = useRef(null)
-
-  const plotScrollToSeqScrollOffset = useRef(null) // plot area has more bases, so seq box need to scroll extra lengths to match the middle coordinate
-  const seqScrollToPlotScrollOffset = useRef(null)
 
   const boxCenterChunkId = useRef(initMiddleIdx)
 
@@ -106,18 +101,21 @@ function App() {
   const handleMouseEnterSeqBox = () => { scrollBox.current = 'seqBox' }
   const handleMouseLeaveSeqBox = () => { scrollBox.current = 'plotBox' }
 
-  // coordinate ruler
-  const [plotCoords, setPlotCoords] = useState([0, 0, 0])
-  const [seqCoords, setSeqCoords] = useState([0, 0, 0])
-
+  // coordinates
+  const seqCoordsList = useRef([])
+  const [seqCoords, setSeqCoords] = useState([])
+  const coordResolution = 50
 
   // both seq and plot fixed at 3 chunks
   const leftTriggerPoint = useRef(null) // at the end of first chunk
   const rightTriggerPoint = useRef(null) // at the end of second chunk
 
   const plotBoxScrollLeft = useRef(null)
+  const seqBoxScrollLeft = useRef(null) // track to use in edit box
 
   // const [showEachMotif, setShowEachMotif] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
+  // const paddingSeqs = useRef(null)
 
   // URL update effect
   useEffect(() => {
@@ -152,17 +150,10 @@ function App() {
       const plotScrollWidth = plotPxPerBP * boxSeqLen
       plotBoxScrollWidth.current = plotScrollWidth
       plotBoxAvailableScroll.current = plotScrollWidth * initPlotNum - boxWidth
-      seqBoxAvailableScroll.current = seqBoxScrollWidth.current * initPlotNum - boxWidth
+      // seqBoxAvailableScroll.current = seqBoxScrollWidth.current * initPlotNum - boxWidth
       plotBoxPxPerBase.current = plotPxPerBP
 
-      seqBoxViewHalfLen.current = boxWidth / seqBoxPxPerBase / 2
       plotBoxViewHalfLen.current = boxWidth / plotPxPerBP / 2
-
-      seqBoxBorderHalf.current = plotPxPerBP / seqBoxPxPerBase * 50 // in percentage 100% / 2
-
-      plotScrollToSeqScrollOffset.current = (boxWidth / plotPxPerBP - boxWidth / seqBoxPxPerBase) / 2 * seqBoxPxPerBase + seqBoxPxPerBase * boxSeqLen // plus the left buffer
-
-      seqScrollToPlotScrollOffset.current = (boxWidth / seqBoxPxPerBase - boxWidth / plotPxPerBP) / 2 * plotPxPerBP
 
       // trigger points are based on plot scroll position, as seq box is way wider than plot
       leftTriggerPoint.current = plotScrollWidth - boxWidth
@@ -185,8 +176,7 @@ function App() {
     seqStartCoord.current = centerCoordinate - initPlotNum * boxSeqHalfLen // seq box only spans 3 chunks
     seqEndCoord.current = centerCoordinate + initPlotNum * boxSeqHalfLen
 
-
-    const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin)
+    const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin, false, '')
 
     seqList.current = [sequence]
     tooltipsList.current = [tooltips]
@@ -196,33 +186,48 @@ function App() {
     plotLayoutList.current = [plotLayout]
     setItems([0])
 
+    const coordinates = strand === '+' ?
+      range(start, end, coordResolution) : range(start + coordResolution, end + coordResolution, coordResolution).reverse()
+
+    seqCoordsList.current = [coordinates]
+
     requestAnimationFrame(() => {
       setIsFirstChunkInited(true)
       setSeq(sequence)
       setTooltips(tooltips)
       setAnnoColors(annocolors)
+      setSeqCoords(coordinates)
     })
 
     // scroll things to middle
     setTimeout(() => {
-      seqbox.current.scrollLeft = Math.round((seqBoxScrollWidth.current - boxWindowWidth.current) * 0.5)
+      const seqboxChunkScrollWidth = seqbox.current.scrollWidth
+      seqBoxAvailableScroll.current = seqboxChunkScrollWidth * initPlotNum - boxWindowWidth.current
+      seqbox.current.scrollLeft = Math.round((seqboxChunkScrollWidth - boxWindowWidth.current) * 0.5)
       plotbox.current.scrollTo(Math.round((plotBoxScrollWidth.current - boxWindowWidth.current) * 0.5))
-      // isInitedScrolled.current = true
+
+      // update other params
+      const seqboxPxPerBase = seqboxChunkScrollWidth / boxSeqLen
+      seqBoxViewHalfLen.current = boxWindowWidth.current / seqboxPxPerBase / 2
+      seqBoxBorderHalf.current = plotBoxPxPerBase.current / seqboxPxPerBase * 50 // in percentage 100% / 2
+
+      seqBoxScrollWidth.current = seqboxChunkScrollWidth
+      seqBoxPxPerBase.current = seqboxPxPerBase
+
     }, 10)
   }
 
   // get sequence
   useEffect(() => {
-    if (isWorkerInited) { initPlot() }
+    if (isWorkerInited && !submitSeq.current) { initPlot() }
   }, [isWorkerInited, genome, chromosome, centerCoordinate, strand])
 
   const initSideChunks = async () => {
-    await updateLists('left', strand)
-    await updateLists('right', strand)
-
     // start shifting chunks
     isTransitioning.current = true
     isInitedScrolled.current = false
+    await updateLists('left', strand)
+    await updateLists('right', strand)
 
     const centerChunk = Math.floor(initPlotNum / 2)
     setSeq([seqList.current[centerChunk - 1], seqList.current[centerChunk], seqList.current[centerChunk + 1]].join(""))
@@ -230,36 +235,24 @@ function App() {
     setTooltips([tooltipsList.current[centerChunk - 1], tooltipsList.current[centerChunk], tooltipsList.current[centerChunk + 1]].flat())
     setItems([centerChunk - 1, centerChunk, centerChunk + 1])
 
+    setSeqCoords([seqCoordsList.current[centerChunk - 1], seqCoordsList.current[centerChunk], seqCoordsList.current[centerChunk + 1]].flat())
+
     plotbox.current.scrollTo(plotBoxAvailableScroll.current / 2)
-    
+
+
     requestAnimationFrame(() => {
-      seqbox.current.scrollLeft =  seqBoxAvailableScroll.current / 2
+      seqbox.current.scrollLeft = seqBoxAvailableScroll.current / 2
       isInitedScrolled.current = true
       isTransitioning.current = false
-      
+
     })
   }
   // load the other two chunks once the middle chunk is loaded
   useEffect(() => {
-    if (isFirstChunkInited) {
-       initSideChunks() 
-      }
-  }, [isFirstChunkInited])
-
-  const scrollTimeout = useRef(null); // To track when scrolling stops
-
-  const getCoords = (strand, startCoord, endCoord, scrollLeft, pxPerBase, baseHalfLen) => {
-
-    if (strand === '+') {
-      const leftCoord = startCoord + scrollLeft / pxPerBase
-      const coords = [Math.round(leftCoord), Math.round(leftCoord + baseHalfLen), Math.round(leftCoord + 2 * baseHalfLen)]
-      return coords
-    } else {
-      const leftCoord = endCoord - scrollLeft / pxPerBase
-      const coords = [Math.round(leftCoord), Math.round(leftCoord - baseHalfLen), Math.round(leftCoord - 2 * baseHalfLen)]
-      return coords
+    if (isFirstChunkInited && !submitSeq.current) { // if it's submitted, don't init side chunks
+      initSideChunks()
     }
-  }
+  }, [isFirstChunkInited])
 
   const convertScrollLeft = (sourceScrollLeft, sourceMidScrollPoint, targetMidScrollPoint, targetToSourceScrollRatio) => {
     return targetToSourceScrollRatio * (sourceScrollLeft - sourceMidScrollPoint) + targetMidScrollPoint
@@ -280,7 +273,10 @@ function App() {
       allEndCoord.current = newEnd // update end
     }
 
-    const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(newStart, newEnd, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin)
+    const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(newStart, newEnd, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin, false, '')
+
+    const newCoords = strand === '+' ?
+      range(newStart, newEnd, coordResolution) : range(newStart + coordResolution, newEnd + coordResolution, coordResolution).reverse()
 
     // prepend or append according to directions
     if (direction === 'left') {
@@ -290,12 +286,14 @@ function App() {
       annoList.current.unshift(annocolors)
       plotDataList.current.unshift(plotData)
       plotLayoutList.current.unshift(plotLayout)
+      seqCoordsList.current.unshift(newCoords)
     } else {
       seqList.current.push(sequence)
       tooltipsList.current.push(tooltips)
       annoList.current.push(annocolors)
       plotDataList.current.push(plotData)
       plotLayoutList.current.push(plotLayout)
+      seqCoordsList.current.push(newCoords)
     }
 
     requestAnimationFrame(() => {
@@ -310,6 +308,8 @@ function App() {
     setAnnoColors([annoList.current[centerChunk - 1], annoList.current[centerChunk], annoList.current[centerChunk + 1]].flat())
     setTooltips([tooltipsList.current[centerChunk - 1], tooltipsList.current[centerChunk], tooltipsList.current[centerChunk + 1]].flat())
     setItems([centerChunk - 1, centerChunk, centerChunk + 1])
+
+    setSeqCoords([seqCoordsList.current[centerChunk - 1], seqCoordsList.current[centerChunk], seqCoordsList.current[centerChunk + 1]].flat())
 
     if (direction === 'left') {
       seqbox.current.scrollLeft += seqBoxScrollWidth.current
@@ -342,19 +342,18 @@ function App() {
     requestAnimationFrame(() => {
       isTransitioning.current = false
       boxCenterChunkId.current = centerId
-      // update seq coords no matter fetch or not
-      updateSeqCoords(strand, direction, seqStartCoord, seqEndCoord, boxSeqLen)
     })
   }
 
   const handlePlotBoxScrollNew = ({ scrollOffset }) => {
-    
-    if (scrollBox.current === 'seqBox' || isTransitioning.current || !isInitedScrolled.current) return
+
+    if (scrollBox.current === 'seqBox' || isTransitioning.current || !isInitedScrolled.current || isEditMode) return
     plotBoxScrollLeft.current = scrollOffset
 
-    const seqScrollLeft = convertScrollLeft(scrollOffset, plotBoxAvailableScroll.current / 2, seqBoxAvailableScroll.current / 2, seqBoxPxPerBase / plotBoxPxPerBase.current)
+    const seqScrollLeft = convertScrollLeft(scrollOffset, plotBoxAvailableScroll.current / 2, seqBoxAvailableScroll.current / 2, seqBoxPxPerBase.current / plotBoxPxPerBase.current)
 
     seqbox.current.scrollLeft = seqScrollLeft
+    seqBoxScrollLeft.current = Math.round(seqScrollLeft)
 
     if (scrollOffset < leftTriggerPoint.current && !isUpdatingLists.current) {
       if (boxCenterChunkId.current === 1) {
@@ -368,29 +367,18 @@ function App() {
       } else {
         scrollUpdate('right', strand, false)
       }
-    } else {
-      // Detect when scrolling stops
-      clearTimeout(scrollTimeout.current);
-      scrollTimeout.current = setTimeout(() => {
-
-        const seqCoords = getCoords(strand, seqStartCoord.current, seqEndCoord.current, seqScrollLeft, seqBoxPxPerBase, seqBoxViewHalfLen.current)
-        const plotCoords = strand === '+' ?
-        [seqCoords[1] - plotBoxViewHalfLen.current, seqCoords[1], seqCoords[1] + plotBoxViewHalfLen.current]
-        : [seqCoords[1] + plotBoxViewHalfLen.current, seqCoords[1], seqCoords[1] - plotBoxViewHalfLen.current]
-        setSeqCoords(seqCoords)
-        setPlotCoords(plotCoords)
-      }, 300); // Slightly longer delay to catch the stop
     }
   }
 
   const handleSeqBoxScrollNew = () => {
-    if (scrollBox.current === 'plotBox' || isTransitioning.current || !isInitedScrolled.current) return
+    if (scrollBox.current === 'plotBox' || isTransitioning.current || !isInitedScrolled.current || isEditMode) return
 
     // syncing scrolls
     const seqScrollLeft = seqbox.current.scrollLeft
-    const plotScrollLeft = convertScrollLeft(seqScrollLeft, seqBoxAvailableScroll.current / 2, plotBoxAvailableScroll.current / 2, plotBoxPxPerBase.current / seqBoxPxPerBase)
+    const plotScrollLeft = convertScrollLeft(seqScrollLeft, seqBoxAvailableScroll.current / 2, plotBoxAvailableScroll.current / 2, plotBoxPxPerBase.current / seqBoxPxPerBase.current)
 
     plotbox.current.scrollTo(Math.round(plotScrollLeft))
+    seqBoxScrollLeft.current = Math.round(seqScrollLeft)
 
     // handling chunks updates
     if (plotScrollLeft < leftTriggerPoint.current && !isUpdatingLists.current) {
@@ -405,29 +393,6 @@ function App() {
       } else {
         scrollUpdate('right', strand, false)
       }
-    } else {
-      // Detect when scrolling stops
-      clearTimeout(scrollTimeout.current);
-      scrollTimeout.current = setTimeout(() => {
-
-        const seqCoords = getCoords(strand, seqStartCoord.current, seqEndCoord.current, seqScrollLeft, seqBoxPxPerBase, seqBoxViewHalfLen.current)
-        const plotCoords = strand === '+' ?
-        [seqCoords[1] - plotBoxViewHalfLen.current, seqCoords[1], seqCoords[1] + plotBoxViewHalfLen.current]
-        : [seqCoords[1] + plotBoxViewHalfLen.current, seqCoords[1], seqCoords[1] - plotBoxViewHalfLen.current]
-        setSeqCoords(seqCoords)
-        setPlotCoords(plotCoords)
-      }, 300); // Slightly longer delay to catch the stop
-    }
-  }
-
-  const updateSeqCoords = (strand, direction, seqStartCoord, seqEndCoord, boxSeqLen) => {
-    if ((strand === '+' && direction === 'left') || (strand === '-' && direction === 'right')) {
-      // moving toward a smaller start
-      seqStartCoord.current -= boxSeqLen
-      seqEndCoord.current -= boxSeqLen
-    } else {
-      seqStartCoord.current += boxSeqLen
-      seqEndCoord.current += boxSeqLen
     }
   }
 
@@ -473,99 +438,195 @@ function App() {
     window.addEventListener('message', handleReady)
   }
 
+  const editBox = useRef(null)
+  const [editSeq, setEditSeq] = useState('')
+  const editAnno = useRef(null)
+  const submitSeq = useRef(null)
+  const seqMinLength = useRef(null)
+  const [seqError, setSeqError] = useState(false)
+  const seqWarnMessage = useRef('Invalid sequence')
+
+  const editTimeout = useRef(null); // To track when scrolling stops
+  function handleEditInput(e) {
+    // pull out the *plain text* (no HTML) that the user just edited
+
+    clearTimeout(editTimeout.current);
+
+    editTimeout.current = setTimeout(() => {
+      const txt = seqbox.current.textContent || '';
+
+      const valid = isValidDNA(txt, seqMinLength.current)
+
+      if (valid) {
+        submitSeq.current = txt
+        setSeqError(false)
+      } else {
+        setSeqError(true)
+      }
+
+    }, 200)
+
+  }
+  const loadEditMode = async () => {
+    if (!isEditMode) {
+      // when click on edit button
+      const currentMid = seqCoords[1]
+      // const editHalfLen = 1000
+      // const convOffset = configs.current.convOffset
+      const start = currentMid - boxSeqHalfLen
+      const end = currentMid + boxSeqHalfLen
+
+      isTransitioning.current = true
+
+      const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin, false, '')
+
+      setSeq(sequence)
+      setTooltips(tooltips)
+      setAnnoColors(annocolors)
+
+      // setEditSeq(seqList.current[boxCenterChunkId.current])
+
+      editAnno.current = annoList.current[boxCenterChunkId.current]
+      seqMinLength.current = configs.current.convOffset * 2
+      seqWarnMessage.current = `Invalid sequence! Seq min length: ${configs.current.convOffset * 2 + 1}, and must contain only acgtACGT`
+
+      seqStartCoord.current = start
+      seqEndCoord.current = end
+
+      requestAnimationFrame(() => {
+        setIsEditMode(true)
+        // new start point always at the middle
+        seqbox.current.scrollLeft = seqBoxAvailableScroll.current / 2 - seqBoxScrollWidth.current // missing one left chunk
+        requestAnimationFrame(() => {
+          isTransitioning.current = false
+          seqbox.current.focus()
+          // editBox.current.scrollLeft = seqBoxScrollLeft.current - seqBoxScrollWidth.current
+        })
+      })
+    } else {
+      // when click on submit button
+      if (!seqError) {
+        // submit for inference and get result
+        setIsFirstChunkInited(false)
+        // disable scrolling updates
+        isTransitioning.current = true
+        isUpdatingLists.current = true
+
+        const start = 0
+        const end = submitSeq.current.length - 2 * configs.current.convOffset
+        // const strand = '+' // coord from left to right
+        // fix numbers for coords syncing
+        seqBoxScrollWidth.current = seqBoxPxPerBase.current * (end - start)
+        plotBoxScrollWidth.current = plotBoxPxPerBase.current * (end - start)
+        plotBoxAvailableScroll.current = plotBoxPxPerBase.current * (end - start) - boxWindowWidth.current
+        seqBoxAvailableScroll.current = seqBoxPxPerBase.current * (end - start) - boxWindowWidth.current
+
+        seqStartCoord.current = start
+        seqEndCoord.current = end
+        allStartCoord.current = start
+        allEndCoord.current = end
+        // setStrand(strand)
+
+        const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin, true, submitSeq.current)
+
+        setSeq(sequence)
+        setTooltips(tooltips)
+        setAnnoColors(annocolors)
+        plotDataList.current = [plotData]
+        plotLayoutList.current = [plotLayout]
+        setItems([0])
+
+        requestAnimationFrame(() => {
+          setIsEditMode(false)
+          setIsFirstChunkInited(true)
+
+          requestAnimationFrame(() => {
+            seqbox.current.scrollLeft = Math.round(seqBoxAvailableScroll.current / 2)
+            plotbox.current.scrollTo(Math.round(plotBoxAvailableScroll.current / 2))
+            isTransitioning.current = false
+          })
+        })
+      }
+    }
+
+  }
+
   return (
     <div className='mx-2'>
       <h1 className="my-4 text-3xl font-extrabold text-gray-900 dark:text-white md:text-5xl lg:text-6xl"><span className="text-transparent bg-clip-text bg-gradient-to-r to-emerald-600 from-sky-400">Sequence browser</span> demo</h1>
 
       <GenomeForm {...genomeFormVars} />
-      <div className='flex-grow py-2 overflow-x-hidden' ref={container}>
-
-        {/* seqBox ruler */}
-        <div className='relative h-10 border-b-1'>
-          {/* coordinates */}
-          <div className="absolute pt-1 top-2 left-1/2 text-xs text-sky-700"
-            style={{ left: "0%", transform: "translateX(0%)" }}
-          > {Math.floor(seqCoords[0])} </div>
-
-          <div className="absolute pt-1 top-2 left-1/2 text-xs text-sky-700"
-            style={{ left: "50%", transform: "translateX(-50%)" }}
-          > {Math.floor(seqCoords[1])} </div>
-          <div className="absolute pt-1 top-2 left-1/2 text-xs text-sky-700"
-            style={{ left: "100%", transform: "translateX(-100%)" }}
-          > {Math.floor(seqCoords[2])} </div>
-
-          {/* ticks */}
-          <div className="absolute top-7 bottom-0 w-[3px] bg-gray-500"
-            style={{ left: "0%", transform: "translateX(0%)" }}
-          ></div>
-          {[25, 50, 75].map((pos, index) => (
-            <div key={index} className="absolute top-7 bottom-0 w-[3px] bg-gray-500"
-              style={{ left: `${pos}%`, transform: "translateX(-50%)" }}
-            ></div>
-          ))}
-          <div className="absolute top-7 bottom-0 w-[3px] bg-gray-500"
-            style={{ left: "100%", transform: "translateX(-100%)" }}
-          ></div>
-        </div>
+      <div className='flex-grow py-2' ref={container}>
+        <button
+          onClick={loadEditMode}
+          className="py-1 px-2 text-sm font-medium text-gray-900 bg-white rounded-lg border border-gray-700 hover:bg-gray-100 hover:text-blue-700 focus:ring-4 focus:ring-gray-100">
+          {isEditMode ? 'Submit' : 'Edit'}
+        </button>
 
         {/* Sequence box */}
         <div className='relative'>
+          {/* Vertical center line in sequence box */}
+          <div className={`absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%]`} style={{ transform: "translateX(-50%)" }} />
+
+          {/* single scrollable wrapper for coordinate track and sequence track*/}
           <div
-            className="sequence-box bg-white border-[2px] border-dashed border-slate-500 overflow-x-auto font-mono whitespace-nowrap"
+            className="sequence-box bg-white border-[2px] border-dashed border-slate-500 overflow-x-auto"
             ref={seqbox}
             onScroll={handleSeqBoxScrollNew}
             onMouseEnter={handleMouseEnterSeqBox}
             onMouseLeave={handleMouseLeaveSeqBox}
           >
-            {/* Vertical center line in sequence box */}
-            <div className={`absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%]`} style={{ transform: "translateX(-50%)" }} />
-            {isFirstChunkInited ?
-              seq.split("").map((char, index) => (
-                <Tippy content={tooltips[index]} key={index}>
-                  <span style={{
-                    backgroundColor: annoColors[index],
-                    display: 'inline-block',
-                    width: seqBoxPxPerBase,
-                  }}>
-                    {char}
-                  </span>
-                </Tippy>
-              ))
-              : "Loading...."}
+
+            {isFirstChunkInited &&
+              <div
+                className="flex text-xs bg-gray-100"
+                style={{ width: seqBoxScrollWidth.current * 3 }}
+              >
+                {seqCoords.map((pos, index) => (
+                  <div
+                    key={index}
+                    className="flex-1 text-left select-none border-l-2 border-gray-500"
+                    style={{ userSelect: "none" }}
+                  >
+                    {pos}
+                  </div>
+                ))}
+              </div>
+
+            }
+            <div
+              className="font-mono whitespace-nowrap"
+              // ref={seqbox}
+              contentEditable={isEditMode}
+              suppressContentEditableWarning
+
+              onInput={handleEditInput}
+            // style={{ width: seqBoxScrollWidth.current }}  // ← same total width
+            >
+              {isFirstChunkInited
+                ? seq.split("").map((char, index) => (
+                  <Tippy content={tooltips[index]} key={index}>
+                    <span
+                      style={{
+                        backgroundColor: annoColors[index],
+                        display: "inline",
+                      }}
+                    >
+                      {char}
+                    </span>
+                  </Tippy>
+                ))
+                : "Loading...."}
+            </div>
           </div>
         </div>
+
+        {seqError && < div className='text-red-500'>  {seqWarnMessage.current} </div>}
 
         {/* each motif button */}
         {/* <button onClick={openEachMotif} className="mt-2 py-2.5 px-5 me-2 mb-2 text-sm font-medium text-gray-900 bg-white rounded-lg border border-gray-700 hover:bg-gray-100 hover:text-blue-700 focus:ring-4 focus:ring-gray-100">Each motif</button> */}
 
         {/* Plot box */}
-        {/* plotBox ruler */}
-        <div className='relative h-10 border-b-1'>
-          {/* coordinates */}
-          <div className="absolute pt-1 top-2 left-1/2 text-xs text-sky-700"
-            style={{ left: "0%", transform: "translateX(0%)" }}
-          > {Math.floor(plotCoords[0])} </div>
-
-          <div className="absolute pt-1 top-2 left-1/2 text-xs text-sky-700"
-            style={{ left: "50%", transform: "translateX(-50%)" }}
-          > {Math.floor(plotCoords[1])} </div>
-          <div className="absolute pt-1 top-2 left-1/2 text-xs text-sky-700"
-            style={{ left: "100%", transform: "translateX(-100%)" }}
-          > {Math.floor(plotCoords[2])} </div>
-
-          {/* ticks */}
-          <div className="absolute top-7 bottom-0 w-[3px] bg-gray-500"
-            style={{ left: "0%", transform: "translateX(0%)" }}
-          ></div>
-          {[25, 50, 75].map((pos, index) => (
-            <div key={index} className="absolute top-7 bottom-0 w-[3px] bg-gray-500"
-              style={{ left: `${pos}%`, transform: "translateX(-50%)" }}
-            ></div>
-          ))}
-          <div className="absolute top-7 bottom-0 w-[3px] bg-gray-500"
-            style={{ left: "100%", transform: "translateX(-100%)" }}
-          ></div>
-        </div>
 
         {isFirstChunkInited ?
           <div className='mt-2'>
@@ -606,8 +667,7 @@ function App() {
                   layout="horizontal"
                   ref={plotbox}
                   height={plotHeight + plotBottomMargin}
-                  // itemCount={items.length}
-                  itemCount={initPlotNum}
+                  itemCount={items.length}
                   itemSize={plotBoxScrollWidth.current}
                   width={boxWindowWidth.current}
                   onScroll={handlePlotBoxScrollNew}
@@ -623,8 +683,39 @@ function App() {
 
 
       </div>
-    </div>
+    </div >
   )
+
+  // backup
+
+  return (<>
+    {isEditMode ?
+
+      <div className='relative'>
+        <div className={`absolute top-0 bottom-0 w-[2px] bg-gray-500 left-[50%]`} style={{ transform: "translateX(-50%)" }} />
+        <div
+          className="mt-2 edit-box bg-white border-[2px] border-dashed border-slate-500 overflow-x-auto font-mono whitespace-nowrap"
+          contentEditable
+          suppressContentEditableWarning
+          ref={editBox}
+          onInput={handleEditInput}
+        >
+          {editSeq.split("").map((char, index) => (
+            <span key={index} style={{
+              backgroundColor: editAnno.current[index],
+              display: 'inline',
+              // width: seqBoxPxPerBase.current,
+            }}>
+              {char}
+            </span>
+          ))
+          }</div>
+
+      </div>
+      : <></>
+    }
+
+  </>)
 }
 
 // init function: load config file
@@ -729,6 +820,29 @@ const workerInference = (start, end, genome, chromosome, strand, isWorkerInited,
   });
 };
 
+
+// sequence only
+const workerSeqInference = (sequence, start, end, strand, isWorkerInited, infWorker, pendingInference, configs) => {
+
+  if (!isWorkerInited) {
+    return Promise.reject("Inference infWorker not ready");
+  }
+
+  return new Promise((resolve, reject) => {
+    const requestId = crypto.randomUUID(); // Unique ID for this request
+    // Store resolve function so it can be called when inference is done
+    pendingInference.current.set(requestId, resolve);
+
+    // Send message to infWorker with requestId
+    infWorker.current.postMessage({
+      type: "seqInference",
+      data: { sequence, start, end, strand, configs },
+      requestId
+    });
+
+  });
+};
+
 const initWorker = (infWorker, pendingInference, setIsWorkerInited, configs) => {
   infWorker.current = new inferenceWorker()
 
@@ -797,11 +911,20 @@ const getPlotData = (plotDataMatrix, start, end, strand, plotConfig) => {
   return plotTraces.filter(trace => trace !== null);
 };
 
-// get all data corresponding to a chunk of sequence
-const getSeqPlotAnno = async (start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin) => {
 
+// get all data corresponding to a chunk of sequence
+const getSeqPlotAnno = async (start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin, seqMode, inputSeq) => {
+  const { sequence, results, tooltips, annocolors } = seqMode
+    ? await workerSeqInference(
+      inputSeq, start, end, strand,
+      isWorkerInited, infWorker, pendingInference, configs
+    )
+    : await workerInference(
+      start, end, genome, chromosome, strand,
+      isWorkerInited, infWorker, pendingInference, configs
+    );
   // infWorker fetch sequence and run inference, note that inf result is shorter than sequence input
-  const { sequence, results, tooltips, annocolors } = await workerInference(start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs)
+  // const { sequence, results, tooltips, annocolors } = await workerInference(start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs)
 
   // set plotly traces from inference results
   const plotMat = configs.current.yDataKeys.map(key => Array.from(results[key].cpuData)) // plotMatrix
@@ -836,6 +959,15 @@ const getSeqPlotAnno = async (start, end, genome, chromosome, strand, isWorkerIn
   }
 
   return { sequence, tooltips, annocolors, plotData, plotLayout }
+
+}
+
+
+const isValidDNA = (str, len) => {
+  if (str.length <= len) return false
+
+  const dnaRegex = /^[ACGT]+$/i
+  return dnaRegex.test(str)
 
 }
 
