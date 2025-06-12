@@ -16,7 +16,6 @@ export default function EachMotif() {
     const [chromosome, setChromosome] = useState(() => searchParams.get('c') || "chr7")
     const [model, setModel] = useState(() => searchParams.get('m') || "motif_line")
 
-
     const [centerCoordinate, setCenterCoordinate] = useState(() => {
         const pos = searchParams.get('pos')
         return pos ? Math.max(1, parseInt(pos)) : 5530600
@@ -73,9 +72,7 @@ export default function EachMotif() {
 
     // const jobRunningMessage = 
     const [isJobRunning, setIsJobRunning] = useState(false)
-
     const [seqVersion, setSeqVersion] = useState(0)
-
     const runSeqRef = useRef(null)
 
     // record scrollLeft value and recover after new inference
@@ -494,29 +491,6 @@ export default function EachMotif() {
 
         </div>
     )
-
-    //
-    return (
-        <div>
-            <div
-                ref={oneRowRef}
-                onScroll={handleOneRowScroll}
-                onMouseEnter={handleMouseEnterOneRow}
-                className='oneRowMotifs mt-5 overflow-x-auto font-mono whitespace-nowrap'
-                contenteditable="true"
-            >
-                {isContentReady && seqOneRow.current.split("").map((char, index) => (
-                    <Tippy content={tooltipsOneRow.current[index]} key={index}>
-                        <span style={{ backgroundColor: colorOneRow.current[index], display: 'inline-block', width: 10 }}>{char}</span>
-                    </Tippy>
-                ))}
-            </div>
-
-
-
-        </div>
-
-    )
 }
 
 
@@ -689,7 +663,7 @@ function filterAndMaskMotifs(start, end, sequence, flatData, dims, threshold, co
                 thisMotifColor.push(hslToCss(h, s, blendedLightness))
             } else {
                 motifChars[j] = '-';
-                thisMotifColor.push('white') // white in hsl
+                thisMotifColor.push('white')
             }
             thisTooltips.push(`${start + j} (${bases[j]}): ${val.toFixed(2)}`)
 
