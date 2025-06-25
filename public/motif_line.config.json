@@ -2,7 +2,7 @@
     "modelPath": "/motif.onnx",
     "annoModelPath": "/max_index.onnx",
     "convOffset": 14,
-    "title": "Motif acivation",
+    "title": "Motif activation",
     "threshold": 8.0,
     "scaledThreshold": 0.05,
     "inf_annos": true,
