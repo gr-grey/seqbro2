@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import useDebounce from "./useDebounce";
-import { FiSearch } from "react-icons/fi";
+import Autosuggest from 'react-autosuggest'; // Import Autosuggest
+import useDebounce from "./useDebounce"; // Assuming useDebounce is in a separate file
 
 const labelStyle = "text-sm font-md text-gray-700";
 const fieldStyle = "rounded-md border border-gray-300 px-2 h-10";
@@ -16,170 +16,180 @@ const mapping = {
 }
 
 const GeneSearch = ({ onSelectGene }) => {
-    const [geneTss, setGeneTss] = useState('')
-    const [suggestions, setSuggestions] = useState([])
-    const [showSuggestions, setShowSuggestions] = useState(false)
-    const suggestionsRef = useRef(null)
-    const inputRef = useRef(null)
-    const [highlightedIndex, setHighlightedIndex] = useState(-1)
+    const [geneTss, setGeneTss] = useState(''); // Value for the input field
+    const [suggestions, setSuggestions] = useState([]); // List of suggestions to display
+    // NEW: State for the "highly expressed TSS" checkbox, default to true (checked)
+    const [isHighlyExpressedChecked, setIsHighlyExpressedChecked] = useState(true);
 
-    // fetch suggestions from solr backend
-    const fetchSuggestions = async (value) => {
-        // remove space
-        const searchQuery = value.trim().replace(/\s/g, "")
+    // Function to fetch suggestions from your Solr backend
+    // Modified to accept a parameter for whether to fetch highly expressed TSS
+    const getSuggestions = async (value, useHighExpressed = true) => {
+        const searchQuery = value.trim().replace(/\s/g, "");
 
-        // need at least 1 character to start suggesting
-        if (searchQuery.length < 1) { return [] }
+        if (searchQuery.length < 1) { return []; }
 
-        const url = `https://solr.zhoulab.io/solr/tss/suggest?suggest=true&suggest.build=true&suggest.dictionary=tssSuggest&suggest.q=${searchQuery}`
+        let url = "";
+        if (useHighExpressed) {
+            url = `https://solr.zhoulab.io/solr/hightss/suggest?suggest=true&suggest.build=true&suggest.dictionary=hightssSuggest&suggest.q=${searchQuery}`;
+        } else {
+            url = `https://solr.zhoulab.io/solr/tss/suggest?suggest=true&suggest.build=true&suggest.dictionary=tssSuggest&suggest.q=${searchQuery}`;
+        }
+
 
         try {
-            // get suggestions
-            const response = await fetch(url)
+            const response = await fetch(url);
             if (!response.ok) {
-                console.error('HTTP error! Status: ', response.status)
-                return []
+                console.error('HTTP error! Status: ', response.status);
+                return [];
             }
 
-            const data = await response.json()
-            const jsonRoot = data.suggest.tssSuggest
-            const jsonKey = jsonRoot[searchQuery]
-            const rawSuggestions = jsonKey ? jsonKey.suggestions : []
+            const data = await response.json();
+            // Adjust parsing based on the dictionary name for highly expressed vs regular
+            const jsonRoot = useHighExpressed ? data.suggest.hightssSuggest : data.suggest.tssSuggest;
+            const jsonKey = jsonRoot[searchQuery];
+            const rawSuggestions = jsonKey ? jsonKey.suggestions : [];
 
+            const parsedSuggestions = rawSuggestions.map(item => {
+                const gene_arr = item.term.split("__");
+                const strand = gene_arr[3] === 'plus' ? '+' : '-';
+                const gene_name = gene_arr[0].toUpperCase().replace(new RegExp(Object.keys(mapping).join('|'), 'g'), matched => mapping[matched]);
+                const chrom = gene_arr[1].replace(new RegExp(Object.keys(mapping).join('|'), 'g'), matched => mapping[matched]);
+                const coordinate = parseInt(gene_arr[2]);
+                const formatted_label = `${gene_name} | ${chrom} : ${coordinate} ${strand}`;
 
-            // raw suggestions are like "A1BG-AS1__chr19__58347315__plus"
-            const suggestions = rawSuggestions.map(item => {
-                const gene_arr = item.term.split("__")
-                const strand = gene_arr[3] === 'plus' ? '+' : '-'
-                const gene_name = gene_arr[0].toUpperCase().replace(new RegExp(Object.keys(mapping).join('|'), 'g'), matched => mapping[matched])
-                const chrom = gene_arr[1].replace(new RegExp(Object.keys(mapping).join('|'), 'g'), matched => mapping[matched])
-
-                const coordinate = parseInt(gene_arr[2])
-                const formatted_label = `${gene_name} | ${chrom} : ${coordinate} ${strand}`
-
-                // return {label: formatted_label}
                 return {
                     label: formatted_label,
                     gene_name,
                     chrom,
                     coordinate,
                     strand
-                }
-            })
+                };
+            });
 
-            return suggestions
+            return parsedSuggestions;
         } catch (error) {
-            console.error("Error fetching tss suggestions", error)
-            return []
+            console.error("Error fetching tss suggestions", error);
+            return [];
         }
-    }
+    };
 
-    const onChange = async (e) => {
-        const newValue = e.target.value
-        setGeneTss(newValue)
-        setHighlightedIndex(-1)
+    // Autosuggest will call this function every time you need to update suggestions.
+    const onSuggestionsFetchRequested = async ({ value }) => {
+        // Pass the current checkbox state to getSuggestions
+        setSuggestions(await getSuggestions(value, isHighlyExpressedChecked));
+    };
 
-        const newSuggestions = await fetchSuggestions(newValue)
-        setSuggestions(newSuggestions)
+    // Autosuggest will call this function every time you need to clear suggestions.
+    const onSuggestionsClearRequested = () => {
+        setSuggestions([]);
+    };
 
-        // show suggestions only when there are any and input is not empty
-        setShowSuggestions(newSuggestions.length > 0 && newValue.trim().length > 0)
-    }
+    // When suggestion is clicked, Autosuggest needs to know what should be
+    // displayed in the input field.
+    const getSuggestionValue = suggestion => suggestion.label;
 
-    const handleSuggestionClick = (suggestion) => {
-        setGeneTss(suggestion.label)
-        setSuggestions([])
-        setShowSuggestions(false)
+    // Use your existing rendering logic for each suggestion.
+    const renderSuggestion = suggestion => (
+        <div className="px-4 py-2 cursor-pointer">
+            {suggestion.label}
+        </div>
+    );
+
+    // This function is called when a suggestion is selected.
+    const onSuggestionSelected = (event, { suggestion, suggestionValue, suggestionIndex, sectionIndex, method }) => {
         if (onSelectGene) {
-            onSelectGene(suggestion) // notify parent component
+            onSelectGene(suggestion); // Pass the full suggestion object to parent
         }
-    }
+        setGeneTss(suggestion.label); // Update input field with selected label
+    };
 
-    const handleKeyDown = (e) => {
-        if (suggestions.length === 0) return
+    const onChange = (event, { newValue }) => {
+        setGeneTss(newValue);
+    };
 
-        if (e.key === 'ArrowDown') {
-            e.preventDefault()
-            setHighlightedIndex(
-                prevIndex => (prevIndex + 1) % suggestions.length
-            )
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault()
-            setHighlightedIndex(
-                prevIndex => (prevIndex - 1 + suggestions.length) % suggestions.length
-            )
-        } else if (e.key === 'Enter') {
-            if (highlightedIndex !== -1 && suggestions[highlightedIndex]) {
-                e.preventDefault()
-                handleSuggestionClick(suggestions[highlightedIndex])
-            }
-        } else if (e.key === 'Escape') {
-            setShowSuggestions(false)
-            setHighlightedIndex(-1)
-            inputRef.current.blur()
-        }
-    }
+    // Handler for the checkbox change
+    const handleHighlyExpressedChange = async (e) => {
+        const checked = e.target.checked;
+        setIsHighlyExpressedChecked(checked);
+        // Immediately fetch new suggestions based on the new checkbox state
+        // and the current input value.
+        setSuggestions(await getSuggestions(geneTss, checked));
+    };
+
+
+    // Input properties for Autosuggest
+    const inputProps = {
+        placeholder: 'e.g., ACTB | chr7 : 5530600 -',
+        value: geneTss,
+        onChange: onChange,
+        className: "rounded-md border border-gray-300 px-2 h-10 w-full", // Apply Tailwind classes
+    };
+
+    // Custom theme to apply Tailwind classes to Autosuggest elements
+    const autosuggestTheme = {
+        container: 'relative',
+        input: 'rounded-md border border-gray-300 px-2 h-10 w-full',
+        suggestionsContainer: 'absolute z-10 w-full bg-white rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto', // Border removed as per user request
+        suggestionsList: 'list-none p-0 m-0',
+        suggestion: 'px-4 py-2 cursor-pointer hover:bg-gray-100',
+        suggestionHighlighted: 'bg-blue-100', // Class for highlighted item
+    };
 
     return (
         <div className="flex flex-col">
-
             <label className='text-sm font-md text-gray-700'>Gene</label>
-            <div className="relative">
+            {/* Replace your custom input and suggestions list with Autosuggest */}
+            <Autosuggest
+                suggestions={suggestions}
+                onSuggestionsFetchRequested={onSuggestionsFetchRequested}
+                onSuggestionsClearRequested={onSuggestionsClearRequested}
+                getSuggestionValue={getSuggestionValue}
+                renderSuggestion={renderSuggestion}
+                inputProps={inputProps}
+                onSuggestionSelected={onSuggestionSelected}
+                theme={autosuggestTheme} // Apply custom theme
+            />
+            {/* NEW: Highly Expressed TSS Checkbox */}
+            <div className="mt-2 flex items-center">
                 <input
-                    type="text"
-                    className="rounded-md border border-gray-300 px-2 h-10"
-                    placeholder='e.g., ACTB | chr7 : 5530600 -'
-                    onKeyDown={handleKeyDown}
-                    value={geneTss}
-                    onChange={onChange}
+                    type="checkbox"
+                    id="highlyExpressedTSS"
+                    checked={isHighlyExpressedChecked}
+                    onChange={handleHighlyExpressedChange}
+                    className="form-checkbox h-4 w-4 text-blue-600 rounded"
                 />
-                {/* <FiSearch className="absolute right-3 top-3 text-gray-500" size={18} /> */}
-                {showSuggestions && suggestions.length > 0 && (
-                    <div
-                        ref={suggestionsRef}
-                        className="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto"
-                        // Use onMouseDown to prevent blur event from firing before click on suggestion
-                        onMouseDown={(e) => e.preventDefault()}
-                    >
-                        <ul className="list-none p-0 m-0">
-                            {suggestions.map((suggestion, index) => (
-                                <li
-                                    key={index} // Use a unique key
-                                    className={`px-4 py-2 cursor-pointer hover:bg-gray-100 ${index === highlightedIndex ? 'bg-blue-100' : ''
-                                        }`}
-                                    onClick={() => handleSuggestionClick(suggestion)}
-                                    // onMouseEnter for keyboard highlight
-                                    onMouseEnter={() => setHighlightedIndex(index)}
-                                    onMouseLeave={() => setHighlightedIndex(-1)}
-                                >
-                                    {suggestion.label}
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
+                <label htmlFor="highlyExpressedTSS" className="ml-2 text-sm text-gray-700">Highly Expressed TSS</label>
             </div>
         </div>
-    )
-}
+    );
+};
 
 const GenomeForm = ({ genome, setGenome, chromosome, setChromosome, centerCoordinate, setCenterCoordinate, strand, setStrand, gene, setGene }) => {
+    // This state now represents the user's input in the coordinate field,
+    // which will be debounced before updating centerCoordinate.
     const [tempCoordinate, setTempCoordinate] = useState(centerCoordinate);
     const debouncedCoordinate = useDebounce(tempCoordinate, 500);
 
+    // Effect to update the main centerCoordinate state after debounce.
     useEffect(() => {
         setCenterCoordinate(debouncedCoordinate);
-    }, [debouncedCoordinate]);
+    }, [debouncedCoordinate, setCenterCoordinate]);
+
+    // Effect to keep tempCoordinate in sync with centerCoordinate when
+    // centerCoordinate is changed by an external source (like gene selection).
+    useEffect(() => {
+        setTempCoordinate(centerCoordinate);
+    }, [centerCoordinate]);
+
 
     // Determine chromosome list based on genome selection
     const chromosomeList = genome === "hg38" ? humanChrs : mouseChrs;
 
     const handleGeneSelect = (selectedGene) => {
         setChromosome(selectedGene.chrom);
-        // setCenterCoordinate(selectedGene.coordinate);
-        setTempCoordinate(selectedGene.coordinate)
+        setTempCoordinate(selectedGene.coordinate); // Update tempCoordinate, which will then debounce
         setStrand(selectedGene.strand);
-        setGene(selectedGene.gene_name); // Also set the gene name if you want to display it separately
+        setGene(selectedGene.gene_name);
     };
 
     return (
@@ -208,7 +218,12 @@ const GenomeForm = ({ genome, setGenome, chromosome, setChromosome, centerCoordi
                     {/* Coordinate */}
                     <div className="flex flex-col w-1/5">
                         <label className={labelStyle}>Coordinate</label>
-                        <input type="number" value={tempCoordinate} onChange={(e) => setTempCoordinate(parseInt(e.target.value))} className={fieldStyle} />
+                        <input
+                            type="number"
+                            value={tempCoordinate}
+                            onChange={(e) => setTempCoordinate(parseInt(e.target.value))}
+                            className={fieldStyle}
+                        />
                     </div>
                     {/* Strand */}
                     <div className="flex flex-col">
@@ -232,15 +247,9 @@ const GenomeForm = ({ genome, setGenome, chromosome, setChromosome, centerCoordi
                     </div>
                 </div>
 
-                {/* Gene */}
+                {/* Gene Search */}
                 <div className="flex flex-col">
-
-                    <GeneSearch onSelectGene={handleGeneSelect}/>
-                    {/* <label className={labelStyle}>Gene</label>
-                    <div className="relative">
-                        <input type="text" value={gene} onChange={(e) => setGene(e.target.value)} className="rounded-md border border-gray-300 px-2 h-10 w-25" />
-                        <FiSearch className="absolute right-3 top-3 text-gray-500" size={18} />
-                    </div> */}
+                    <GeneSearch onSelectGene={handleGeneSelect} />
                 </div>
             </form>
         </div>
