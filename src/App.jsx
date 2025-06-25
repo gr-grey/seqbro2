@@ -13,18 +13,26 @@ function App() {
 
   // State initialization from URL parameters
   const [searchParams, setSearchParams] = useSearchParams()
-  const [genome, setGenome] = useState(() => searchParams.get('g') || "hg38")
-  const [chromosome, setChromosome] = useState(() => searchParams.get('c') || "chr7")
-  const [model, setModel] = useState(() => searchParams.get('m') || "puffin")
 
+  // default genome location
+  const defaultGenome = "hg38";
+  const defaultChromosome = "chr7";
+  const defaultModel = "puffin";
+  const defaultCenterCoordinate = 5530600;
+  const defaultStrand = "-";
+
+  const [genome, setGenome] = useState(() => searchParams.get('g') || defaultGenome);
+  const [chromosome, setChromosome] = useState(() => searchParams.get('c') || defaultChromosome);
+  const [model, setModel] = useState(() => searchParams.get('m') || defaultModel);
   const [centerCoordinate, setCenterCoordinate] = useState(() => {
-    const pos = searchParams.get('pos')
-    return pos ? Math.max(1, parseInt(pos)) : 5530600
-  })
+    const pos = searchParams.get('pos');
+    return pos ? Math.max(1, parseInt(pos)) : defaultCenterCoordinate;
+  });
   const [strand, setStrand] = useState(() => {
-    const s = searchParams.get('s')
-    return ['+', '-'].includes(s) ? s : '-'
-  })
+    const s = searchParams.get('s');
+    return ['+', '-'].includes(s) ? s : defaultStrand;
+  });
+
   const [gene, setGene] = useState(searchParams.get('gene') || 'ACTB')
 
   const genomeFormVars = { genome, setGenome, chromosome, setChromosome, centerCoordinate, setCenterCoordinate, strand, setStrand, gene, setGene }
@@ -119,20 +127,46 @@ function App() {
 
   // URL update effect
   useEffect(() => {
-    const params = new URLSearchParams({
+    // It's crucial to compare with the *current* searchParams from the hook,
+    // which React Router updates after navigation.
+    // However, if the page is loaded with no params, this might not trigger the initial set.
+    // Let's refine this to only update if the current state *does not match* the URL.
+
+    const currentUrlParams = new URLSearchParams(window.location.search);
+    const paramsFromState = new URLSearchParams({
       g: genome,
       c: chromosome,
       pos: centerCoordinate.toString(),
       s: strand,
       m: model
-    })
+    });
 
-    // Only update if different from current URL
-    if (params.toString() !== searchParams.toString()) {
-      setSearchParams(params, { replace: true })
+    // Check if the URL params derived from state are different from the actual URL params
+    if (paramsFromState.toString() !== currentUrlParams.toString()) {
+      setSearchParams(paramsFromState, { replace: true });
     }
-  }, [genome, chromosome, centerCoordinate, strand, model, searchParams, setSearchParams])
 
+  }, [genome, chromosome, centerCoordinate, strand, model, setSearchParams]); // searchParams is no longer a direct dependency here
+
+  // Function to reset all state to default values
+  const resetToDefault = useCallback(() => {
+    setGenome(defaultGenome);
+    setChromosome(defaultChromosome);
+    setModel(defaultModel);
+    setCenterCoordinate(defaultCenterCoordinate);
+    setStrand(defaultStrand);
+
+    // Explicitly set the URL params to the default as well
+    const defaultParams = new URLSearchParams({
+      g: defaultGenome,
+      c: defaultChromosome,
+      pos: defaultCenterCoordinate.toString(),
+      s: defaultStrand,
+      m: defaultModel
+    });
+    setSearchParams(defaultParams, { replace: true });
+
+  }, [setSearchParams]); // setSearchParams is stable, so useCallback is fine
   // load configs
   useEffect(() => {
     loadConfigFile(`/${model}.config.json`, configs, setIsConfigsLoaded)
@@ -173,26 +207,27 @@ function App() {
     allEndCoord.current = end
 
     // clear state variables
+    submitSeq.current = null
     setSeq(null)
     setTooltips(null)
     setAnnoColors(null)
     setSeqCoords(null)
     setItems([0])
-    
+
     const { sequence, tooltips, annocolors, plotData, plotLayout } = await getSeqPlotAnno(start, end, genome, chromosome, strand, isWorkerInited, infWorker, pendingInference, configs, plotHeight, plotBoxScrollWidth, plotBottomMargin, false, '')
-    
+
     seqList.current = [sequence]
     tooltipsList.current = [tooltips]
     annoList.current = [annocolors]
-    
+
     plotDataList.current = [plotData]
     plotLayoutList.current = [plotLayout]
-    
+
     const coordinates = strand === '+' ?
-    range(start, end, coordResolution) : range(start + coordResolution, end + coordResolution, coordResolution).reverse()
-    
+      range(start, end, coordResolution) : range(start + coordResolution, end + coordResolution, coordResolution).reverse()
+
     seqCoordsList.current = [coordinates]
-    
+
     requestAnimationFrame(() => {
       setIsFirstChunkInited(true)
       setSeq(sequence)
@@ -259,7 +294,6 @@ function App() {
       seqbox.current.scrollLeft = seqBoxAvailableScroll.current / 2
       isInitedScrolled.current = true
       isTransitioning.current = false
-
     })
   }
   // load the other two chunks once the middle chunk is loaded
@@ -600,13 +634,13 @@ function App() {
     }
   }
 
-  const handleSelectSuggestion = () => {
-
-  }
-
   return (
     <div className='mx-2'>
-      <h1 className="my-4 text-3xl font-extrabold text-gray-900 dark:text-white md:text-5xl lg:text-6xl"><span className="text-transparent bg-clip-text bg-gradient-to-r to-emerald-600 from-sky-400">Sequence browser</span> demo</h1>
+      <Link to="/" onClick={resetToDefault}> {/* Add onClick to reset state */}
+        <h1 className="my-4 text-3xl font-extrabold text-gray-900 dark:text-white md:text-5xl lg:text-6xl">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r to-emerald-600 from-sky-400">Sequence browser</span> demo
+        </h1>
+      </Link>
 
       <GenomeForm {...genomeFormVars} />
 
