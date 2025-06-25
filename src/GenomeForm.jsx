@@ -175,9 +175,9 @@ const GenomeForm = ({ genome, setGenome, chromosome, setChromosome, centerCoordi
     const chromosomeList = genome === "hg38" ? humanChrs : mouseChrs;
 
     const handleGeneSelect = (selectedGene) => {
-        console.log('setting state variables by', selectedGene)
         setChromosome(selectedGene.chrom);
-        setCenterCoordinate(selectedGene.coordinate);
+        // setCenterCoordinate(selectedGene.coordinate);
+        setTempCoordinate(selectedGene.coordinate)
         setStrand(selectedGene.strand);
         setGene(selectedGene.gene_name); // Also set the gene name if you want to display it separately
     };
